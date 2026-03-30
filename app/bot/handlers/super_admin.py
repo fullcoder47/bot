@@ -6,6 +6,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.role import RoleFilter
+from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import (
     build_super_admin_keyboard,
     settings_button_texts,
@@ -61,8 +62,56 @@ async def super_admin_panel_handler(
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    user = await _require_super_admin_user(message, session, settings)
-    if user is None:
+    if message.from_user is None:
+        return
+
+    auth_service = AuthService(session, settings)
+
+    try:
+        user = await auth_service.require_super_admin(message.from_user.id)
+    except LanguageSelectionRequiredError:
+        await message.answer(
+            t(
+                DEFAULT_LANGUAGE,
+                uz="Avval /start buyrug'ini yuboring.",
+                ru="Сначала отправьте команду /start.",
+                en="Please send /start first.",
+            )
+        )
+        return
+    except AccessDeniedError:
+        try:
+            company_access = await auth_service.require_company_admin(message.from_user.id)
+        except LanguageSelectionRequiredError:
+            await message.answer(
+                t(
+                    DEFAULT_LANGUAGE,
+                    uz="Avval /start buyrug'ini yuboring.",
+                    ru="Сначала отправьте команду /start.",
+                    en="Please send /start first.",
+                )
+            )
+            return
+        except AccessDeniedError as exc:
+            await message.answer(
+                t(
+                    exc.language or DEFAULT_LANGUAGE,
+                    uz="Sizda panelga kirish huquqi yo'q.",
+                    ru="У вас нет доступа к панели.",
+                    en="You do not have access to the panel.",
+                )
+            )
+            return
+
+        await message.answer(
+            t(
+                company_access.user.language,
+                uz=f"Company admin paneli: {company_access.company.name}",
+                ru=f"Панель company admin: {company_access.company.name}",
+                en=f"Company admin panel: {company_access.company.name}",
+            ),
+            reply_markup=build_company_admin_keyboard(company_access.user.language or DEFAULT_LANGUAGE),
+        )
         return
 
     await message.answer(

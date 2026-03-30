@@ -14,13 +14,17 @@ class CompanyService:
         self.company_repo = CompanyRepository(session)
         self.company_admin_invite_repo = CompanyAdminInviteRepository(session)
 
+    @staticmethod
+    def normalize_company_name(name: str) -> str:
+        return " ".join(name.split()).strip()
+
     async def ensure_name_available(self, name: str) -> None:
         existing_company = await self.company_repo.get_by_name(name)
         if existing_company is not None:
             raise CompanyAlreadyExistsError(name)
 
     async def create_company(self, payload: CompanyCreateDTO) -> CompanyDetailDTO:
-        normalized_name = payload.name.strip()
+        normalized_name = self.normalize_company_name(payload.name)
         if not normalized_name:
             raise ValueError("Company name cannot be empty.")
 

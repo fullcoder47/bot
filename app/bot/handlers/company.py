@@ -58,6 +58,13 @@ def _format_company_detail(language, company: CompanyDetailDTO) -> str:
             en="Not assigned",
         )
     )
+    assignment_status_text = (
+        t(language, uz="Faol", ru="Активна", en="Active")
+        if company.admin_assignment_is_active
+        else t(language, uz="Nofaol", ru="Неактивна", en="Inactive")
+        if company.has_admin_assignment
+        else "-"
+    )
     subscription_text = (
         company.subscription_end.strftime("%Y-%m-%d %H:%M")
         if isinstance(company.subscription_end, datetime)
@@ -95,6 +102,12 @@ def _format_company_detail(language, company: CompanyDetailDTO) -> str:
                 uz=f"👤 Company admin: {admin_text}",
                 ru=f"👤 Company admin: {admin_text}",
                 en=f"👤 Company admin: {admin_text}",
+            ),
+            t(
+                language,
+                uz=f"🪪 Biriktirish holati: {assignment_status_text}",
+                ru=f"🪪 Статус назначения: {assignment_status_text}",
+                en=f"🪪 Assignment status: {assignment_status_text}",
             ),
         ]
     )
@@ -221,7 +234,7 @@ async def create_company_name_input_handler(
     if user is None:
         return
 
-    company_name = (message.text or "").strip()
+    company_name = CompanyService.normalize_company_name(message.text or "")
     if not company_name:
         await message.answer(
             t(
@@ -256,6 +269,27 @@ async def create_company_name_input_handler(
             uz="Endi kompaniya tarifini tanlang.",
             ru="Теперь выберите тариф компании.",
             en="Now choose the company plan.",
+        ),
+        reply_markup=build_company_plan_keyboard(user.language),
+    )
+
+
+@router.message(RoleFilter(UserRole.SUPER_ADMIN), CompanyCreateStates.waiting_for_plan)
+async def create_company_waiting_for_plan_message_handler(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_super_admin_message(message, session, settings)
+    if user is None:
+        return
+
+    await message.answer(
+        t(
+            user.language,
+            uz="Iltimos, tarifni tugmalar orqali tanlang.",
+            ru="Пожалуйста, выберите тариф с помощью кнопок.",
+            en="Please choose the plan using the buttons.",
         ),
         reply_markup=build_company_plan_keyboard(user.language),
     )

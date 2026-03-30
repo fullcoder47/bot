@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.company import Company
@@ -16,7 +16,8 @@ class CompanyRepository:
         return await self.session.scalar(statement)
 
     async def get_by_name(self, name: str) -> Company | None:
-        statement = select(Company).where(Company.name == name)
+        normalized_name = name.strip().lower()
+        statement = select(Company).where(func.lower(Company.name) == normalized_name)
         return await self.session.scalar(statement)
 
     async def list_all(self) -> list[Company]:
