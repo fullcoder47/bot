@@ -7,7 +7,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
+from app.bot.filters.text import LocalizedTextFilter
 from app.bot.keyboards.inline.company import (
     build_company_detail_keyboard,
     build_company_list_keyboard,
@@ -27,7 +27,6 @@ from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyAdminAssignDTO, CompanyCreateDTO, CompanyDetailDTO
 from app.domain.dto.user_dto import UserDTO
 from app.domain.enums.company_plan import CompanyPlan
-from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.domain.exceptions.company_exceptions import (
     CompanyAlreadyExistsError,
@@ -205,9 +204,8 @@ async def _restore_company_menu(message: Message, language) -> None:
 
 
 @router.message(
-    RoleFilter(UserRole.SUPER_ADMIN),
     CompanyCreateStates.waiting_for_name,
-    F.text.in_(company_menu_back_button_texts()),
+    LocalizedTextFilter(*company_menu_back_button_texts()),
 )
 async def create_company_name_back_handler(
     message: Message,
@@ -223,7 +221,7 @@ async def create_company_name_back_handler(
     await _show_company_menu(message, user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), CompanyCreateStates.waiting_for_name)
+@router.message(CompanyCreateStates.waiting_for_name)
 async def create_company_name_input_handler(
     message: Message,
     state: FSMContext,
@@ -274,7 +272,7 @@ async def create_company_name_input_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), CompanyCreateStates.waiting_for_plan)
+@router.message(CompanyCreateStates.waiting_for_plan)
 async def create_company_waiting_for_plan_message_handler(
     message: Message,
     session: AsyncSession,
@@ -296,7 +294,6 @@ async def create_company_waiting_for_plan_message_handler(
 
 
 @router.callback_query(
-    RoleFilter(UserRole.SUPER_ADMIN),
     CompanyCreateStates.waiting_for_plan,
     F.data == "company:create:back",
 )
@@ -323,7 +320,6 @@ async def create_company_plan_back_handler(
 
 
 @router.callback_query(
-    RoleFilter(UserRole.SUPER_ADMIN),
     CompanyCreateStates.waiting_for_plan,
     F.data.startswith("company:create:plan:"),
 )
@@ -428,9 +424,8 @@ async def create_company_plan_selected_handler(
 
 
 @router.message(
-    RoleFilter(UserRole.SUPER_ADMIN),
     CompanyAdminAssignStates.waiting_for_telegram_id,
-    F.text.in_(company_menu_back_button_texts()),
+    LocalizedTextFilter(*company_menu_back_button_texts()),
 )
 async def assign_company_admin_back_handler(
     message: Message,
@@ -462,7 +457,7 @@ async def assign_company_admin_back_handler(
     await _restore_company_menu(message, user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), CompanyAdminAssignStates.waiting_for_telegram_id)
+@router.message(CompanyAdminAssignStates.waiting_for_telegram_id)
 async def assign_company_admin_input_handler(
     message: Message,
     state: FSMContext,
@@ -535,7 +530,7 @@ async def assign_company_admin_input_handler(
     await _restore_company_menu(message, user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(companies_button_texts()))
+@router.message(LocalizedTextFilter(*companies_button_texts()))
 async def companies_menu_handler(
     message: Message,
     session: AsyncSession,
@@ -548,7 +543,7 @@ async def companies_menu_handler(
     await _show_company_menu(message, user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(add_company_button_texts()))
+@router.message(LocalizedTextFilter(*add_company_button_texts()))
 async def create_company_entry_handler(
     message: Message,
     state: FSMContext,
@@ -572,7 +567,7 @@ async def create_company_entry_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(company_list_button_texts()))
+@router.message(LocalizedTextFilter(*company_list_button_texts()))
 async def company_list_handler(
     message: Message,
     session: AsyncSession,
@@ -607,7 +602,7 @@ async def company_list_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(company_menu_back_button_texts()))
+@router.message(LocalizedTextFilter(*company_menu_back_button_texts()))
 async def company_menu_back_handler(
     message: Message,
     session: AsyncSession,
@@ -628,7 +623,7 @@ async def company_menu_back_handler(
     )
 
 
-@router.callback_query(RoleFilter(UserRole.SUPER_ADMIN), F.data == "company:menu")
+@router.callback_query(F.data == "company:menu")
 async def company_menu_callback_handler(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -649,7 +644,7 @@ async def company_menu_callback_handler(
     )
 
 
-@router.callback_query(RoleFilter(UserRole.SUPER_ADMIN), F.data == "company:list")
+@router.callback_query(F.data == "company:list")
 async def company_list_callback_handler(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -685,7 +680,7 @@ async def company_list_callback_handler(
     )
 
 
-@router.callback_query(RoleFilter(UserRole.SUPER_ADMIN), F.data.startswith("company:detail:"))
+@router.callback_query(F.data.startswith("company:detail:"))
 async def company_detail_callback_handler(
     callback: CallbackQuery,
     session: AsyncSession,
@@ -719,7 +714,7 @@ async def company_detail_callback_handler(
     )
 
 
-@router.callback_query(RoleFilter(UserRole.SUPER_ADMIN), F.data.startswith("company:assign:"))
+@router.callback_query(F.data.startswith("company:assign:"))
 async def assign_company_admin_entry_handler(
     callback: CallbackQuery,
     state: FSMContext,
@@ -762,7 +757,7 @@ async def assign_company_admin_entry_handler(
     )
 
 
-@router.callback_query(RoleFilter(UserRole.SUPER_ADMIN), F.data.startswith("company:toggle:"))
+@router.callback_query(F.data.startswith("company:toggle:"))
 async def toggle_company_status_handler(
     callback: CallbackQuery,
     session: AsyncSession,

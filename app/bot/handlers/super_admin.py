@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from aiogram import F, Router
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
+from app.bot.filters.text import LocalizedTextFilter
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import (
     build_super_admin_keyboard,
@@ -15,7 +15,6 @@ from app.bot.keyboards.reply.super_admin import (
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.user_dto import UserDTO
-from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.services.auth_service import AuthService
 
@@ -125,7 +124,7 @@ async def super_admin_panel_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(statistics_button_texts()))
+@router.message(LocalizedTextFilter(*statistics_button_texts()))
 async def statistics_placeholder_handler(
     message: Message,
     session: AsyncSession,
@@ -138,14 +137,14 @@ async def statistics_placeholder_handler(
     await message.answer(
         t(
             user.language,
-            uz="Statistika bo'limi keyingi bosqichda qo'shiladi.",
-            ru="Раздел статистики будет добавлен на следующем этапе.",
-            en="The statistics section will be added in the next stage.",
+            uz="Statistika bo'limi tez orada qo'shiladi.",
+            ru="Раздел статистики скоро будет добавлен.",
+            en="The statistics section will be added soon.",
         )
     )
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), F.text.in_(settings_button_texts()))
+@router.message(LocalizedTextFilter(*settings_button_texts()))
 async def settings_placeholder_handler(
     message: Message,
     session: AsyncSession,
@@ -158,8 +157,8 @@ async def settings_placeholder_handler(
     await message.answer(
         t(
             user.language,
-            uz="Tilni o'zgartirish tez orada qo'shiladi.",
-            ru="Смена языка скоро будет добавлена.",
-            en="Change language placeholder. This will be added soon.",
+            uz="Sozlamalar bo'limi tez orada qo'shiladi. Tilni o'zgartirish keyingi bosqichda qo'shiladi.",
+            ru="Раздел настроек скоро будет добавлен. Смена языка появится на следующем этапе.",
+            en="The settings section will be added soon. Change language will be added in the next stage.",
         )
     )
