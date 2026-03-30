@@ -1,3 +1,10 @@
+from app.domain.dto.company_dto import (
+    CompanyAdminAccessDTO,
+    CompanyAdminAssignDTO,
+    CompanyCreateDTO,
+    CompanyDTO,
+    CompanyDetailDTO,
+)
 from app.domain.dto.user_dto import (
     CreateUserDTO,
     StartFlowResult,
@@ -7,6 +14,11 @@ from app.domain.dto.user_dto import (
 )
 
 __all__ = [
+    "CompanyAdminAccessDTO",
+    "CompanyAdminAssignDTO",
+    "CompanyCreateDTO",
+    "CompanyDTO",
+    "CompanyDetailDTO",
     "CreateUserDTO",
     "StartFlowResult",
     "StartFlowStatus",

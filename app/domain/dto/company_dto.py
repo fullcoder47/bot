@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from app.domain.dto.user_dto import UserDTO
+from app.domain.enums.company_plan import CompanyPlan
+from app.domain.enums.role import UserRole
+
+if TYPE_CHECKING:
+    from app.db.models.company import Company
+    from app.db.models.company_admin_invite import CompanyAdminInvite
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyCreateDTO:
+    name: str
+    plan: CompanyPlan = CompanyPlan.BASIC
+    is_active: bool = True
+    subscription_end: datetime | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyAdminAssignDTO:
+    company_id: int
+    telegram_id: int
+    role: UserRole = UserRole.COMPANY_ADMIN
+    is_active: bool = True
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyDTO:
+    id: int
+    name: str
+    plan: CompanyPlan
+    is_active: bool
+    subscription_end: datetime | None
+
+    @classmethod
+    def from_model(cls, company: Company) -> "CompanyDTO":
+        return cls(
+            id=company.id,
+            name=company.name,
+            plan=company.plan,
+            is_active=company.is_active,
+            subscription_end=company.subscription_end,
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyDetailDTO:
+    id: int
+    name: str
+    plan: CompanyPlan
+    is_active: bool
+    subscription_end: datetime | None
+    assigned_admin_telegram_id: int | None
+    has_admin_assignment: bool
+    admin_assignment_is_active: bool | None
+
+    @classmethod
+    def from_model(
+        cls,
+        company: Company,
+        invite: CompanyAdminInvite | None = None,
+    ) -> "CompanyDetailDTO":
+        return cls(
+            id=company.id,
+            name=company.name,
+            plan=company.plan,
+            is_active=company.is_active,
+            subscription_end=company.subscription_end,
+            assigned_admin_telegram_id=invite.telegram_id if invite else None,
+            has_admin_assignment=invite is not None,
+            admin_assignment_is_active=invite.is_active if invite else None,
+        )
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyAdminAccessDTO:
+    user: UserDTO
+    company: CompanyDTO

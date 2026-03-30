@@ -7,6 +7,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.inline.language import build_language_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
@@ -54,6 +55,18 @@ async def start_handler(
                 ru="У вас нет доступа к этому боту.",
                 en="You do not have access to this bot.",
             )
+        )
+        return
+
+    if result.status is StartFlowStatus.COMPANY_ADMIN:
+        await message.answer(
+            t(
+                language,
+                uz="Company admin paneliga xush kelibsiz.",
+                ru="Добро пожаловать в панель company admin.",
+                en="Welcome to the company admin panel.",
+            ),
+            reply_markup=build_company_admin_keyboard(language),
         )
         return
 

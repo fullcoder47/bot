@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db.repositories.user_repo import UserRepository
+from app.domain.dto.company_dto import CompanyAdminAccessDTO
 from app.domain.dto.user_dto import StartFlowResult, StartFlowStatus, TelegramUserDTO, UserDTO
 from app.domain.enums.language import LanguageCode
 from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
+from app.services.company_admin_service import CompanyAdminService
 from app.services.localization_service import LocalizationService
 from app.services.super_admin_service import SuperAdminService
 
@@ -19,6 +21,7 @@ class AuthService:
         self.user_repo = UserRepository(session)
         self.localization_service = LocalizationService(session)
         self.super_admin_service = SuperAdminService(session, settings)
+        self.company_admin_service = CompanyAdminService(session)
 
     async def start(self, telegram_user: TelegramUserDTO) -> StartFlowResult:
         user = await self.user_repo.get_by_telegram_id(telegram_user.telegram_id)
@@ -40,7 +43,23 @@ class AuthService:
                 user=admin_user,
             )
 
-        user.is_active = False
+        company_admin_access = await self._try_company_admin_access(
+            telegram_user=telegram_user,
+            language=user.language,
+        )
+        if company_admin_access is not None:
+            await self.session.commit()
+            return StartFlowResult(
+                status=StartFlowStatus.COMPANY_ADMIN,
+                language=company_admin_access.user.language,
+                user=company_admin_access.user,
+            )
+
+        await self.user_repo.update_role_and_status(
+            user=user,
+            role=UserRole.EMPLOYEE,
+            is_active=False,
+        )
         await self.session.commit()
         return StartFlowResult(
             status=StartFlowStatus.ACCESS_DENIED,
@@ -67,9 +86,25 @@ class AuthService:
                 user=admin_user,
             )
 
+        company_admin_access = await self._try_company_admin_access(
+            telegram_user=telegram_user,
+            language=language,
+        )
+        if company_admin_access is not None:
+            await self.session.commit()
+            return StartFlowResult(
+                status=StartFlowStatus.COMPANY_ADMIN,
+                language=company_admin_access.user.language,
+                user=company_admin_access.user,
+            )
+
         user = await self.user_repo.get_by_telegram_id(telegram_user.telegram_id)
         if user is not None:
-            user.is_active = False
+            await self.user_repo.update_role_and_status(
+                user=user,
+                role=UserRole.EMPLOYEE,
+                is_active=False,
+            )
             await self.session.commit()
             return StartFlowResult(
                 status=StartFlowStatus.ACCESS_DENIED,
@@ -96,3 +131,19 @@ class AuthService:
             raise AccessDeniedError(user.language)
 
         return UserDTO.from_model(user)
+
+    async def require_company_admin(self, telegram_id: int) -> CompanyAdminAccessDTO:
+        return await self.company_admin_service.require_company_admin(telegram_id)
+
+    async def _try_company_admin_access(
+        self,
+        telegram_user: TelegramUserDTO,
+        language: LanguageCode,
+    ) -> CompanyAdminAccessDTO | None:
+        try:
+            return await self.company_admin_service.bootstrap_company_admin(
+                telegram_user=telegram_user,
+                language=language,
+            )
+        except AccessDeniedError:
+            return None

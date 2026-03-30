@@ -49,6 +49,17 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def update_role_and_status(
+        self,
+        user: User,
+        role: UserRole,
+        is_active: bool,
+    ) -> User:
+        user.role = role
+        user.is_active = is_active
+        await self.session.flush()
+        return user
+
     async def promote_to_super_admin_if_allowed(
         self,
         user: User,

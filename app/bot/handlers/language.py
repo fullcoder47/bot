@@ -4,6 +4,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
 from app.core.localization import t
@@ -63,6 +64,27 @@ async def language_callback_handler(
                 en="Super admin panel",
             ),
             reply_markup=build_super_admin_keyboard(language),
+        )
+        return
+
+    if result.status is StartFlowStatus.COMPANY_ADMIN:
+        await callback.message.edit_text(
+            t(
+                language,
+                uz="Til saqlandi. Company admin paneli tayyor.",
+                ru="Язык сохранен. Панель company admin готова.",
+                en="Language saved. The company admin panel is ready.",
+            ),
+            reply_markup=None,
+        )
+        await callback.message.answer(
+            t(
+                language,
+                uz="Company admin paneli",
+                ru="Панель company admin",
+                en="Company admin panel",
+            ),
+            reply_markup=build_company_admin_keyboard(language),
         )
         return
 
