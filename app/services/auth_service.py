@@ -8,7 +8,7 @@ from app.domain.dto.company_dto import CompanyAdminAccessDTO
 from app.domain.dto.user_dto import StartFlowResult, StartFlowStatus, TelegramUserDTO, UserDTO
 from app.domain.enums.language import LanguageCode
 from app.domain.enums.role import UserRole
-from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
+from app.domain.exceptions.auth_exceptions import AccessDeniedError
 from app.services.company_admin_service import CompanyAdminService
 from app.services.localization_service import LocalizationService
 from app.services.super_admin_service import SuperAdminService
@@ -119,18 +119,7 @@ class AuthService:
         )
 
     async def require_super_admin(self, telegram_id: int) -> UserDTO:
-        user = await self.user_repo.get_by_telegram_id(telegram_id)
-
-        if user is None or user.language is None:
-            raise LanguageSelectionRequiredError()
-
-        if not self.super_admin_service.is_super_admin_allowed(telegram_id):
-            raise AccessDeniedError(user.language)
-
-        if user.role is not UserRole.SUPER_ADMIN or not user.is_active:
-            raise AccessDeniedError(user.language)
-
-        return UserDTO.from_model(user)
+        return await self.super_admin_service.require_access(telegram_id)
 
     async def require_company_admin(self, telegram_id: int) -> CompanyAdminAccessDTO:
         return await self.company_admin_service.require_company_admin(telegram_id)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -34,6 +34,12 @@ class CompanyAdminInviteRepository:
         )
         return await self.session.scalar(statement)
 
+    async def count_active_assignments(self) -> int:
+        statement = select(func.count(CompanyAdminInvite.id)).where(
+            CompanyAdminInvite.is_active.is_(True)
+        )
+        return int((await self.session.scalar(statement)) or 0)
+
     async def upsert(self, payload: CompanyAdminAssignDTO) -> CompanyAdminInvite:
         invite = await self.get_by_company_id(payload.company_id)
 
@@ -52,3 +58,11 @@ class CompanyAdminInviteRepository:
 
         await self.session.flush()
         return invite
+
+    async def delete_by_company_id(self, company_id: int) -> None:
+        invite = await self.get_by_company_id(company_id)
+        if invite is None:
+            return
+
+        await self.session.delete(invite)
+        await self.session.flush()

@@ -34,6 +34,15 @@ class CompanyAdminService:
             raise CompanyNotFoundError(payload.company_id)
 
         invite = await self.company_admin_invite_repo.upsert(payload)
+
+        user = await self.user_repo.get_by_telegram_id(payload.telegram_id)
+        if user is not None and user.role is not UserRole.SUPER_ADMIN:
+            await self.user_repo.update_role_and_status(
+                user=user,
+                role=UserRole.COMPANY_ADMIN,
+                is_active=True,
+            )
+
         await self.session.commit()
         return CompanyDetailDTO.from_model(company, invite)
 
@@ -63,11 +72,12 @@ class CompanyAdminService:
             await self.user_repo.update_profile_fields(user, telegram_user)
             if user.language != language:
                 await self.user_repo.update_language(user, language)
-            await self.user_repo.update_role_and_status(
-                user=user,
-                role=UserRole.COMPANY_ADMIN,
-                is_active=True,
-            )
+            if user.role is not UserRole.SUPER_ADMIN:
+                await self.user_repo.update_role_and_status(
+                    user=user,
+                    role=UserRole.COMPANY_ADMIN,
+                    is_active=True,
+                )
 
         return CompanyAdminAccessDTO(
             user=UserDTO.from_model(user),

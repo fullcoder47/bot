@@ -2,6 +2,11 @@ class CompanyError(Exception):
     """Base company domain exception."""
 
 
+class CompanyNameValidationError(CompanyError):
+    def __init__(self) -> None:
+        super().__init__("Company name is invalid.")
+
+
 class CompanyAlreadyExistsError(CompanyError):
     def __init__(self, company_name: str) -> None:
         self.company_name = company_name

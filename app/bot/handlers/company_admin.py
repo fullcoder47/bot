@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from aiogram import F, Router
+from aiogram import Router
+from aiogram.filters import StateFilter
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
+from app.bot.filters.text import LocalizedTextFilter
 from app.bot.keyboards.reply.company_admin import (
     attendance_button_texts,
     settings_button_texts,
@@ -14,7 +15,6 @@ from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyAdminAccessDTO
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
-from app.domain.enums.role import UserRole
 from app.services.auth_service import AuthService
 
 router = Router(name="company_admin")
@@ -54,7 +54,7 @@ async def _require_company_admin_access(
     return None
 
 
-@router.message(RoleFilter(UserRole.COMPANY_ADMIN), F.text.in_(workers_button_texts()))
+@router.message(StateFilter(None), LocalizedTextFilter(*workers_button_texts()))
 async def workers_placeholder_handler(
     message: Message,
     session: AsyncSession,
@@ -74,7 +74,7 @@ async def workers_placeholder_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.COMPANY_ADMIN), F.text.in_(attendance_button_texts()))
+@router.message(StateFilter(None), LocalizedTextFilter(*attendance_button_texts()))
 async def attendance_placeholder_handler(
     message: Message,
     session: AsyncSession,
@@ -94,7 +94,7 @@ async def attendance_placeholder_handler(
     )
 
 
-@router.message(RoleFilter(UserRole.COMPANY_ADMIN), F.text.in_(settings_button_texts()))
+@router.message(StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
 async def company_admin_settings_placeholder_handler(
     message: Message,
     session: AsyncSession,

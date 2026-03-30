@@ -17,3 +17,7 @@ class AccessDeniedError(AuthError):
     def __init__(self, language: LanguageCode | None = None) -> None:
         self.language = language
         super().__init__("Access denied.")
+
+
+class UnauthorizedAccessError(AccessDeniedError):
+    """Raised when a user tries to access a protected module without permission."""

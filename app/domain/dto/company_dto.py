@@ -22,6 +22,15 @@ class CompanyCreateDTO:
 
 
 @dataclass(slots=True, frozen=True)
+class CompanyUpdateDTO:
+    name: str | None = None
+    plan: CompanyPlan | None = None
+    is_active: bool | None = None
+    subscription_end: datetime | None = None
+    subscription_end_provided: bool = False
+
+
+@dataclass(slots=True, frozen=True)
 class CompanyAdminAssignDTO:
     company_id: int
     telegram_id: int
@@ -75,6 +84,23 @@ class CompanyDetailDTO:
             has_admin_assignment=invite is not None,
             admin_assignment_is_active=invite.is_active if invite else None,
         )
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyListPageDTO:
+    items: list[CompanyDTO]
+    page: int
+    page_size: int
+    total_items: int
+    total_pages: int
+
+
+@dataclass(slots=True, frozen=True)
+class CompanyStatisticsDTO:
+    total_companies: int
+    active_companies: int
+    inactive_companies: int
+    companies_with_admin: int
 
 
 @dataclass(slots=True, frozen=True)
