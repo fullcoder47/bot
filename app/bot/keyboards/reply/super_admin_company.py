@@ -24,6 +24,24 @@ def company_list_button_text(language: LanguageCode | str | None) -> str:
     )
 
 
+def company_search_button_text(language: LanguageCode | str | None) -> str:
+    return t(
+        language,
+        uz="🔎 Qidirish",
+        ru="🔎 Поиск",
+        en="🔎 Search",
+    )
+
+
+def company_filters_button_text(language: LanguageCode | str | None) -> str:
+    return t(
+        language,
+        uz="🧭 Filterlar",
+        ru="🧭 Фильтры",
+        en="🧭 Filters",
+    )
+
+
 def company_menu_back_button_text(language: LanguageCode | str | None) -> str:
     return t(
         language,
@@ -36,8 +54,14 @@ def company_menu_back_button_text(language: LanguageCode | str | None) -> str:
 def build_super_admin_company_keyboard(language: LanguageCode | str | None) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=add_company_button_text(language))],
-            [KeyboardButton(text=company_list_button_text(language))],
+            [
+                KeyboardButton(text=add_company_button_text(language)),
+                KeyboardButton(text=company_list_button_text(language)),
+            ],
+            [
+                KeyboardButton(text=company_search_button_text(language)),
+                KeyboardButton(text=company_filters_button_text(language)),
+            ],
             [KeyboardButton(text=company_menu_back_button_text(language))],
         ],
         resize_keyboard=True,
@@ -64,6 +88,22 @@ def company_list_button_texts() -> set[str]:
         company_list_button_text(LanguageCode.UZ),
         company_list_button_text(LanguageCode.RU),
         company_list_button_text(LanguageCode.EN),
+    }
+
+
+def company_search_button_texts() -> set[str]:
+    return {
+        company_search_button_text(LanguageCode.UZ),
+        company_search_button_text(LanguageCode.RU),
+        company_search_button_text(LanguageCode.EN),
+    }
+
+
+def company_filters_button_texts() -> set[str]:
+    return {
+        company_filters_button_text(LanguageCode.UZ),
+        company_filters_button_text(LanguageCode.RU),
+        company_filters_button_text(LanguageCode.EN),
     }
 
 

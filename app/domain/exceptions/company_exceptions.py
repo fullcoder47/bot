@@ -22,3 +22,8 @@ class CompanyNotFoundError(CompanyError):
 class InvalidTelegramIdError(CompanyError):
     def __init__(self) -> None:
         super().__init__("Invalid Telegram ID.")
+
+
+class CompanyAdminAssignmentError(CompanyError):
+    def __init__(self, message: str = "Company admin assignment error.") -> None:
+        super().__init__(message)

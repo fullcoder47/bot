@@ -31,6 +31,11 @@ class CompanyUpdateDTO:
 
 
 @dataclass(slots=True, frozen=True)
+class SubscriptionUpdateDTO:
+    subscription_end: datetime | None
+
+
+@dataclass(slots=True, frozen=True)
 class CompanyAdminAssignDTO:
     company_id: int
     telegram_id: int
@@ -96,11 +101,41 @@ class CompanyListPageDTO:
 
 
 @dataclass(slots=True, frozen=True)
+class CompanyListFiltersDTO:
+    search: str | None = None
+    is_active: bool | None = None
+    plan: CompanyPlan | None = None
+    expired_only: bool = False
+
+
+@dataclass(slots=True, frozen=True)
+class PlanDistributionDTO:
+    free: int
+    basic: int
+    pro: int
+
+
+@dataclass(slots=True, frozen=True)
 class CompanyStatisticsDTO:
     total_companies: int
     active_companies: int
     inactive_companies: int
+    expired_companies: int
     companies_with_admin: int
+    companies_without_admin: int
+    plan_distribution: PlanDistributionDTO
+
+
+@dataclass(slots=True, frozen=True)
+class SuperAdminDashboardDTO:
+    total_companies: int
+    active_companies: int
+    inactive_companies: int
+    expired_companies: int
+    companies_with_admin: int
+    companies_without_admin: int
+    recent_companies: list[CompanyDTO]
+    plan_distribution: PlanDistributionDTO
 
 
 @dataclass(slots=True, frozen=True)

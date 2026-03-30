@@ -21,6 +21,17 @@ class CompanyAdminInviteRepository:
         )
         return await self.session.scalar(statement)
 
+    async def get_active_by_company_id(self, company_id: int) -> CompanyAdminInvite | None:
+        statement = (
+            select(CompanyAdminInvite)
+            .options(joinedload(CompanyAdminInvite.company))
+            .where(
+                CompanyAdminInvite.company_id == company_id,
+                CompanyAdminInvite.is_active.is_(True),
+            )
+        )
+        return await self.session.scalar(statement)
+
     async def get_active_by_telegram_id(self, telegram_id: int) -> CompanyAdminInvite | None:
         statement = (
             select(CompanyAdminInvite)
@@ -34,13 +45,7 @@ class CompanyAdminInviteRepository:
         )
         return await self.session.scalar(statement)
 
-    async def count_active_assignments(self) -> int:
-        statement = select(func.count(CompanyAdminInvite.id)).where(
-            CompanyAdminInvite.is_active.is_(True)
-        )
-        return int((await self.session.scalar(statement)) or 0)
-
-    async def upsert(self, payload: CompanyAdminAssignDTO) -> CompanyAdminInvite:
+    async def upsert_assignment(self, payload: CompanyAdminAssignDTO) -> CompanyAdminInvite:
         invite = await self.get_by_company_id(payload.company_id)
 
         if invite is None:
@@ -59,10 +64,34 @@ class CompanyAdminInviteRepository:
         await self.session.flush()
         return invite
 
-    async def delete_by_company_id(self, company_id: int) -> None:
+    async def deactivate_by_company_id(self, company_id: int) -> CompanyAdminInvite | None:
         invite = await self.get_by_company_id(company_id)
         if invite is None:
-            return
+            return None
+
+        invite.is_active = False
+        await self.session.flush()
+        return invite
+
+    async def remove_assignment(self, company_id: int) -> CompanyAdminInvite | None:
+        invite = await self.get_by_company_id(company_id)
+        if invite is None:
+            return None
 
         await self.session.delete(invite)
         await self.session.flush()
+        return invite
+
+    async def count_assigned_companies(self) -> int:
+        statement = select(func.count(CompanyAdminInvite.id)).where(
+            CompanyAdminInvite.is_active.is_(True)
+        )
+        return int((await self.session.scalar(statement)) or 0)
+
+    async def count_active_assignments(self) -> int:
+        return await self.count_assigned_companies()
+
+    async def count_unassigned_companies(self) -> int:
+        assigned = await self.count_assigned_companies()
+        total_companies = int((await self.session.scalar(select(func.count(Company.id)))) or 0)
+        return max(total_companies - assigned, 0)

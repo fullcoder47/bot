@@ -16,13 +16,102 @@ from app.bot.keyboards.reply.super_admin import (
 )
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
-from app.domain.dto.company_dto import CompanyStatisticsDTO
+from app.domain.dto.company_dto import CompanyStatisticsDTO, SuperAdminDashboardDTO
 from app.domain.dto.user_dto import UserDTO
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.services.auth_service import AuthService
-from app.services.super_admin_service import SuperAdminService
+from app.services.stats_service import StatsService
 
 router = Router(name="super_admin")
+
+
+def _format_plan_distribution(language, dashboard: CompanyStatisticsDTO | SuperAdminDashboardDTO) -> list[str]:
+    return [
+        t(
+            language,
+            uz=f"FREE: {dashboard.plan_distribution.free}",
+            ru=f"FREE: {dashboard.plan_distribution.free}",
+            en=f"FREE: {dashboard.plan_distribution.free}",
+        ),
+        t(
+            language,
+            uz=f"BASIC: {dashboard.plan_distribution.basic}",
+            ru=f"BASIC: {dashboard.plan_distribution.basic}",
+            en=f"BASIC: {dashboard.plan_distribution.basic}",
+        ),
+        t(
+            language,
+            uz=f"PRO: {dashboard.plan_distribution.pro}",
+            ru=f"PRO: {dashboard.plan_distribution.pro}",
+            en=f"PRO: {dashboard.plan_distribution.pro}",
+        ),
+    ]
+
+
+def _format_dashboard(language, dashboard: SuperAdminDashboardDTO) -> str:
+    recent_lines = [
+        t(language, uz="So'nggi 5 kompaniya:", ru="Последние 5 компаний:", en="Latest 5 companies:")
+    ]
+    if dashboard.recent_companies:
+        recent_lines.extend(
+            f"• {company.name} ({company.plan.value})"
+            for company in dashboard.recent_companies
+        )
+    else:
+        recent_lines.append(
+            t(
+                language,
+                uz="Hozircha kompaniyalar mavjud emas.",
+                ru="Пока компаний нет.",
+                en="There are no companies yet.",
+            )
+        )
+
+    return "\n".join(
+        [
+            t(language, uz="Super admin dashboard", ru="Дашборд супер-админа", en="Super admin dashboard"),
+            t(
+                language,
+                uz=f"🏢 Jami kompaniyalar: {dashboard.total_companies}",
+                ru=f"🏢 Всего компаний: {dashboard.total_companies}",
+                en=f"🏢 Total companies: {dashboard.total_companies}",
+            ),
+            t(
+                language,
+                uz=f"✅ Faol kompaniyalar: {dashboard.active_companies}",
+                ru=f"✅ Активные компании: {dashboard.active_companies}",
+                en=f"✅ Active companies: {dashboard.active_companies}",
+            ),
+            t(
+                language,
+                uz=f"⛔ Nofaol kompaniyalar: {dashboard.inactive_companies}",
+                ru=f"⛔ Неактивные компании: {dashboard.inactive_companies}",
+                en=f"⛔ Inactive companies: {dashboard.inactive_companies}",
+            ),
+            t(
+                language,
+                uz=f"⌛ Muddati tugagan subscriptionlar: {dashboard.expired_companies}",
+                ru=f"⌛ Истекшие подписки: {dashboard.expired_companies}",
+                en=f"⌛ Expired subscriptions: {dashboard.expired_companies}",
+            ),
+            t(
+                language,
+                uz=f"👤 Admin biriktirilgan kompaniyalar: {dashboard.companies_with_admin}",
+                ru=f"👤 Компании с админом: {dashboard.companies_with_admin}",
+                en=f"👤 Companies with admin: {dashboard.companies_with_admin}",
+            ),
+            t(
+                language,
+                uz=f"📭 Admin biriktirilmagan kompaniyalar: {dashboard.companies_without_admin}",
+                ru=f"📭 Компании без админа: {dashboard.companies_without_admin}",
+                en=f"📭 Companies without admin: {dashboard.companies_without_admin}",
+            ),
+            t(language, uz="📦 Tariflar taqsimoti:", ru="📦 Распределение тарифов:", en="📦 Plan distribution:"),
+            *_format_plan_distribution(language, dashboard),
+            "",
+            *recent_lines,
+        ]
+    )
 
 
 def _format_statistics(language, stats: CompanyStatisticsDTO) -> str:
@@ -49,10 +138,24 @@ def _format_statistics(language, stats: CompanyStatisticsDTO) -> str:
             ),
             t(
                 language,
-                uz=f"👤 Admin biriktirilgan kompaniyalar: {stats.companies_with_admin}",
-                ru=f"👤 Компании с назначенным админом: {stats.companies_with_admin}",
-                en=f"👤 Companies with assigned admin: {stats.companies_with_admin}",
+                uz=f"⌛ Muddati tugagan subscriptionlar: {stats.expired_companies}",
+                ru=f"⌛ Истекшие подписки: {stats.expired_companies}",
+                en=f"⌛ Expired subscriptions: {stats.expired_companies}",
             ),
+            t(
+                language,
+                uz=f"👤 Admin biriktirilgan kompaniyalar: {stats.companies_with_admin}",
+                ru=f"👤 Компании с админом: {stats.companies_with_admin}",
+                en=f"👤 Companies with admin: {stats.companies_with_admin}",
+            ),
+            t(
+                language,
+                uz=f"📭 Admin biriktirilmagan kompaniyalar: {stats.companies_without_admin}",
+                ru=f"📭 Компании без админа: {stats.companies_without_admin}",
+                en=f"📭 Companies without admin: {stats.companies_without_admin}",
+            ),
+            t(language, uz="📦 Tariflar taqsimoti:", ru="📦 Распределение тарифов:", en="📦 Plan distribution:"),
+            *_format_plan_distribution(language, stats),
         ]
     )
 
@@ -124,14 +227,14 @@ async def _require_super_admin_callback(
     return None
 
 
-async def _show_super_admin_panel(message: Message, language) -> None:
+async def _show_super_admin_panel(
+    message: Message,
+    language,
+    session: AsyncSession,
+) -> None:
+    dashboard = await StatsService(session).get_super_admin_dashboard()
     await message.answer(
-        t(
-            language,
-            uz="Super admin paneli",
-            ru="Панель супер-админа",
-            en="Super admin panel",
-        ),
+        _format_dashboard(language, dashboard),
         reply_markup=build_super_admin_keyboard(language or DEFAULT_LANGUAGE),
     )
 
@@ -196,7 +299,7 @@ async def super_admin_panel_handler(
         )
         return
 
-    await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE)
+    await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE, session)
 
 
 @router.message(StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
@@ -209,8 +312,7 @@ async def statistics_handler(
     if user is None:
         return
 
-    super_admin_service = SuperAdminService(session, settings)
-    statistics = await super_admin_service.get_statistics()
+    statistics = await StatsService(session).get_company_statistics()
     await message.answer(_format_statistics(user.language, statistics))
 
 
@@ -298,4 +400,4 @@ async def settings_back_handler(
             en="You are back in the super admin panel.",
         )
     )
-    await _show_super_admin_panel(callback.message, user.language or DEFAULT_LANGUAGE)
+    await _show_super_admin_panel(callback.message, user.language or DEFAULT_LANGUAGE, session)
