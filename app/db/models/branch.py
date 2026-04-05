@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.db.models.attendance_session import AttendanceSession
     from app.db.models.company import Company
     from app.db.models.employee import Employee
 
@@ -35,3 +36,4 @@ class Branch(TimestampMixin, Base):
 
     company: Mapped[Company] = relationship(back_populates="branches")
     employees: Mapped[list[Employee]] = relationship(back_populates="branch")
+    attendance_sessions: Mapped[list[AttendanceSession]] = relationship(back_populates="branch")

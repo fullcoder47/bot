@@ -8,6 +8,7 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.handlers.company_admin_common import show_company_admin_panel
+from app.bot.handlers.employee_common import show_employee_panel
 from app.bot.keyboards.inline.language import build_language_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
@@ -139,6 +140,19 @@ async def start_handler(
             )
         )
         await show_company_admin_panel(message, company_admin_access, session)
+        return
+
+    if result.status is StartFlowStatus.EMPLOYEE:
+        employee_access = await auth_service.require_employee(message.from_user.id)
+        await message.answer(
+            t(
+                language,
+                uz="Employee paneliga xush kelibsiz.",
+                ru="Добро пожаловать в employee панель.",
+                en="Welcome to the employee panel.",
+            )
+        )
+        await show_employee_panel(message, employee_access, session)
         return
 
     dashboard = await StatsService(session).get_super_admin_dashboard()

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING
 
+from app.domain.dto.company_dto import CompanyDTO
+from app.domain.dto.user_dto import UserDTO
 from app.domain.dto.branch_dto import BranchDTO
 from app.domain.dto.department_dto import DepartmentDTO
 from app.domain.dto.shift_dto import ShiftDTO
@@ -149,3 +151,10 @@ class EmployeeLocationValidationContextDTO:
     employee: EmployeeDetailDTO
     branch_location: EmployeeBranchLocationDTO | None
     has_valid_location: bool
+
+
+@dataclass(slots=True, frozen=True)
+class EmployeeAccessDTO:
+    user: UserDTO
+    company: CompanyDTO
+    employee: EmployeeDetailDTO

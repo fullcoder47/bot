@@ -11,7 +11,10 @@ from app.db.repositories.branch_repo import BranchRepository
 from app.db.repositories.department_repo import DepartmentRepository
 from app.db.repositories.employee_repo import EmployeeRepository
 from app.db.repositories.shift_repo import ShiftRepository
+from app.db.repositories.user_repo import UserRepository
+from app.domain.dto.company_dto import CompanyDTO
 from app.domain.dto.employee_dto import (
+    EmployeeAccessDTO,
     EmployeeBranchLocationDTO,
     EmployeeCreateDTO,
     EmployeeDetailDTO,
@@ -20,6 +23,10 @@ from app.domain.dto.employee_dto import (
     EmployeeLocationValidationContextDTO,
     EmployeeUpdateDTO,
 )
+from app.domain.dto.user_dto import CreateUserDTO, TelegramUserDTO, UserDTO
+from app.domain.enums.language import LanguageCode
+from app.domain.enums.role import UserRole
+from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.domain.exceptions.company_admin_exceptions import (
     BranchAssignmentRequiredError,
     BranchNotFoundError,
@@ -40,6 +47,7 @@ class EmployeeService:
         self.branch_repo = BranchRepository(session)
         self.department_repo = DepartmentRepository(session)
         self.shift_repo = ShiftRepository(session)
+        self.user_repo = UserRepository(session)
         self.audit_log_repo = AuditLogRepository(session)
 
     @staticmethod
@@ -79,6 +87,64 @@ class EmployeeService:
     @staticmethod
     def normalize_search_query(query: str) -> str:
         return " ".join(query.split()).strip()
+
+    async def bootstrap_employee_access(
+        self,
+        telegram_user: TelegramUserDTO,
+        language: LanguageCode,
+    ) -> EmployeeAccessDTO:
+        employee = await self.employee_repo.get_by_telegram_id(telegram_user.telegram_id)
+        if employee is None or employee.company is None or not employee.is_active or not employee.company.is_active:
+            raise AccessDeniedError(language)
+
+        user = await self.user_repo.get_by_telegram_id(telegram_user.telegram_id)
+        if user is None:
+            user = await self.user_repo.create(
+                CreateUserDTO(
+                    telegram_id=telegram_user.telegram_id,
+                    full_name=telegram_user.full_name,
+                    username=telegram_user.username,
+                    phone=telegram_user.phone,
+                    role=UserRole.EMPLOYEE,
+                    language=language,
+                    is_active=True,
+                )
+            )
+        else:
+            await self.user_repo.update_profile_fields(user, telegram_user)
+            if user.language != language:
+                await self.user_repo.update_language(user, language)
+            if user.role is not UserRole.SUPER_ADMIN:
+                await self.user_repo.update_role_and_status(
+                    user=user,
+                    role=UserRole.EMPLOYEE,
+                    is_active=True,
+                )
+
+        if employee.user_id != user.id:
+            await self.employee_repo.link_user(employee, user.id)
+
+        return self._build_employee_access(user, employee)
+
+    async def require_employee_access(self, telegram_id: int) -> EmployeeAccessDTO:
+        user = await self.user_repo.get_by_telegram_id(telegram_id)
+        if user is None or user.language is None:
+            raise LanguageSelectionRequiredError()
+
+        employee = await self.employee_repo.get_by_telegram_id(telegram_id)
+        if employee is None or employee.company is None:
+            raise AccessDeniedError(user.language)
+
+        if not employee.is_active or not employee.company.is_active:
+            raise AccessDeniedError(user.language)
+
+        if user.role is not UserRole.EMPLOYEE or not user.is_active:
+            raise AccessDeniedError(user.language)
+
+        if employee.user_id != user.id:
+            await self.employee_repo.link_user(employee, user.id)
+
+        return self._build_employee_access(user, employee)
 
     async def create_employee(
         self,
@@ -235,7 +301,11 @@ class EmployeeService:
         branch_location = await self.get_employee_branch_location(company_id, employee_id)
         if branch_location is None:
             return False
-        return branch_location.latitude is not None and branch_location.longitude is not None
+        return (
+            branch_location.latitude is not None
+            and branch_location.longitude is not None
+            and branch_location.allowed_radius_meters is not None
+        )
 
     async def prepare_location_validation_context(
         self,
@@ -249,7 +319,8 @@ class EmployeeService:
             branch_location=branch_location,
             has_valid_location=branch_location is not None
             and branch_location.latitude is not None
-            and branch_location.longitude is not None,
+            and branch_location.longitude is not None
+            and branch_location.allowed_radius_meters is not None,
         )
 
     async def _validate_payload(
@@ -287,3 +358,11 @@ class EmployeeService:
         if employee is None:
             raise EmployeeNotFoundError(employee_id)
         return employee
+
+    @staticmethod
+    def _build_employee_access(user, employee) -> EmployeeAccessDTO:
+        return EmployeeAccessDTO(
+            user=UserDTO.from_model(user),
+            company=CompanyDTO.from_model(employee.company),
+            employee=EmployeeDetailDTO.from_model(employee),
+        )

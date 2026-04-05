@@ -20,12 +20,15 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 
 async def init_db(engine: AsyncEngine) -> None:
     from app.db.models import (  # noqa: F401
+        AttendanceRecord,
+        AttendanceSession,
         AuditLog,
         Branch,
         Company,
         CompanyAdminInvite,
         Department,
         Employee,
+        LeaveRequest,
         Shift,
         User,
     )

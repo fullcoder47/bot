@@ -1,0 +1,10 @@
+from enum import StrEnum
+
+
+class AttendanceSessionStatus(StrEnum):
+    PENDING_LOCATION = "PENDING_LOCATION"
+    PENDING_VIDEO = "PENDING_VIDEO"
+    COMPLETED = "COMPLETED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"

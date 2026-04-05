@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.handlers.company_admin import show_company_admin_settings_menu
-from app.bot.handlers.company_admin_common import format_company_admin_dashboard, require_company_admin_message
+from app.bot.handlers.company_admin_common import format_company_admin_dashboard
+from app.bot.handlers.employee_common import show_employee_panel
 from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import (
@@ -29,24 +30,9 @@ router = Router(name="super_admin")
 
 def _format_plan_distribution(language, dashboard: CompanyStatisticsDTO | SuperAdminDashboardDTO) -> list[str]:
     return [
-        t(
-            language,
-            uz=f"FREE: {dashboard.plan_distribution.free}",
-            ru=f"FREE: {dashboard.plan_distribution.free}",
-            en=f"FREE: {dashboard.plan_distribution.free}",
-        ),
-        t(
-            language,
-            uz=f"BASIC: {dashboard.plan_distribution.basic}",
-            ru=f"BASIC: {dashboard.plan_distribution.basic}",
-            en=f"BASIC: {dashboard.plan_distribution.basic}",
-        ),
-        t(
-            language,
-            uz=f"PRO: {dashboard.plan_distribution.pro}",
-            ru=f"PRO: {dashboard.plan_distribution.pro}",
-            en=f"PRO: {dashboard.plan_distribution.pro}",
-        ),
+        f"FREE: {dashboard.plan_distribution.free}",
+        f"BASIC: {dashboard.plan_distribution.basic}",
+        f"PRO: {dashboard.plan_distribution.pro}",
     ]
 
 
@@ -56,7 +42,7 @@ def _format_dashboard(language, dashboard: SuperAdminDashboardDTO) -> str:
     ]
     if dashboard.recent_companies:
         recent_lines.extend(
-            f"• {company.name} ({company.plan.value})"
+            f"- {company.name} ({company.plan.value})"
             for company in dashboard.recent_companies
         )
     else:
@@ -72,42 +58,12 @@ def _format_dashboard(language, dashboard: SuperAdminDashboardDTO) -> str:
     return "\n".join(
         [
             t(language, uz="Super admin dashboard", ru="Дашборд супер-админа", en="Super admin dashboard"),
-            t(
-                language,
-                uz=f"🏢 Jami kompaniyalar: {dashboard.total_companies}",
-                ru=f"🏢 Всего компаний: {dashboard.total_companies}",
-                en=f"🏢 Total companies: {dashboard.total_companies}",
-            ),
-            t(
-                language,
-                uz=f"✅ Faol kompaniyalar: {dashboard.active_companies}",
-                ru=f"✅ Активные компании: {dashboard.active_companies}",
-                en=f"✅ Active companies: {dashboard.active_companies}",
-            ),
-            t(
-                language,
-                uz=f"⛔ Nofaol kompaniyalar: {dashboard.inactive_companies}",
-                ru=f"⛔ Неактивные компании: {dashboard.inactive_companies}",
-                en=f"⛔ Inactive companies: {dashboard.inactive_companies}",
-            ),
-            t(
-                language,
-                uz=f"⌛ Muddati tugagan subscriptionlar: {dashboard.expired_companies}",
-                ru=f"⌛ Истекшие подписки: {dashboard.expired_companies}",
-                en=f"⌛ Expired subscriptions: {dashboard.expired_companies}",
-            ),
-            t(
-                language,
-                uz=f"👤 Admin biriktirilgan kompaniyalar: {dashboard.companies_with_admin}",
-                ru=f"👤 Компании с админом: {dashboard.companies_with_admin}",
-                en=f"👤 Companies with admin: {dashboard.companies_with_admin}",
-            ),
-            t(
-                language,
-                uz=f"📭 Admin biriktirilmagan kompaniyalar: {dashboard.companies_without_admin}",
-                ru=f"📭 Компании без админа: {dashboard.companies_without_admin}",
-                en=f"📭 Companies without admin: {dashboard.companies_without_admin}",
-            ),
+            t(language, uz=f"🏢 Jami kompaniyalar: {dashboard.total_companies}", ru=f"🏢 Всего компаний: {dashboard.total_companies}", en=f"🏢 Total companies: {dashboard.total_companies}"),
+            t(language, uz=f"✅ Faol kompaniyalar: {dashboard.active_companies}", ru=f"✅ Активные компании: {dashboard.active_companies}", en=f"✅ Active companies: {dashboard.active_companies}"),
+            t(language, uz=f"⛔ Nofaol kompaniyalar: {dashboard.inactive_companies}", ru=f"⛔ Неактивные компании: {dashboard.inactive_companies}", en=f"⛔ Inactive companies: {dashboard.inactive_companies}"),
+            t(language, uz=f"⌛ Muddati tugagan subscriptionlar: {dashboard.expired_companies}", ru=f"⌛ Истекшие подписки: {dashboard.expired_companies}", en=f"⌛ Expired subscriptions: {dashboard.expired_companies}"),
+            t(language, uz=f"👤 Admin biriktirilgan kompaniyalar: {dashboard.companies_with_admin}", ru=f"👤 Компании с админом: {dashboard.companies_with_admin}", en=f"👤 Companies with admin: {dashboard.companies_with_admin}"),
+            t(language, uz=f"📭 Admin biriktirilmagan kompaniyalar: {dashboard.companies_without_admin}", ru=f"📭 Компании без админа: {dashboard.companies_without_admin}", en=f"📭 Companies without admin: {dashboard.companies_without_admin}"),
             t(language, uz="📦 Tariflar taqsimoti:", ru="📦 Распределение тарифов:", en="📦 Plan distribution:"),
             *_format_plan_distribution(language, dashboard),
             "",
@@ -120,42 +76,12 @@ def _format_statistics(language, stats: CompanyStatisticsDTO) -> str:
     return "\n".join(
         [
             t(language, uz="📊 Statistika", ru="📊 Статистика", en="📊 Statistics"),
-            t(
-                language,
-                uz=f"🏢 Jami kompaniyalar: {stats.total_companies}",
-                ru=f"🏢 Всего компаний: {stats.total_companies}",
-                en=f"🏢 Total companies: {stats.total_companies}",
-            ),
-            t(
-                language,
-                uz=f"✅ Faol kompaniyalar: {stats.active_companies}",
-                ru=f"✅ Активные компании: {stats.active_companies}",
-                en=f"✅ Active companies: {stats.active_companies}",
-            ),
-            t(
-                language,
-                uz=f"⛔ Nofaol kompaniyalar: {stats.inactive_companies}",
-                ru=f"⛔ Неактивные компании: {stats.inactive_companies}",
-                en=f"⛔ Inactive companies: {stats.inactive_companies}",
-            ),
-            t(
-                language,
-                uz=f"⌛ Muddati tugagan subscriptionlar: {stats.expired_companies}",
-                ru=f"⌛ Истекшие подписки: {stats.expired_companies}",
-                en=f"⌛ Expired subscriptions: {stats.expired_companies}",
-            ),
-            t(
-                language,
-                uz=f"👤 Admin biriktirilgan kompaniyalar: {stats.companies_with_admin}",
-                ru=f"👤 Компании с админом: {stats.companies_with_admin}",
-                en=f"👤 Companies with admin: {stats.companies_with_admin}",
-            ),
-            t(
-                language,
-                uz=f"📭 Admin biriktirilmagan kompaniyalar: {stats.companies_without_admin}",
-                ru=f"📭 Компании без админа: {stats.companies_without_admin}",
-                en=f"📭 Companies without admin: {stats.companies_without_admin}",
-            ),
+            t(language, uz=f"🏢 Jami kompaniyalar: {stats.total_companies}", ru=f"🏢 Всего компаний: {stats.total_companies}", en=f"🏢 Total companies: {stats.total_companies}"),
+            t(language, uz=f"✅ Faol kompaniyalar: {stats.active_companies}", ru=f"✅ Активные компании: {stats.active_companies}", en=f"✅ Active companies: {stats.active_companies}"),
+            t(language, uz=f"⛔ Nofaol kompaniyalar: {stats.inactive_companies}", ru=f"⛔ Неактивные компании: {stats.inactive_companies}", en=f"⛔ Inactive companies: {stats.inactive_companies}"),
+            t(language, uz=f"⌛ Muddati tugagan subscriptionlar: {stats.expired_companies}", ru=f"⌛ Истекшие подписки: {stats.expired_companies}", en=f"⌛ Expired subscriptions: {stats.expired_companies}"),
+            t(language, uz=f"👤 Admin biriktirilgan kompaniyalar: {stats.companies_with_admin}", ru=f"👤 Компании с админом: {stats.companies_with_admin}", en=f"👤 Companies with admin: {stats.companies_with_admin}"),
+            t(language, uz=f"📭 Admin biriktirilmagan kompaniyalar: {stats.companies_without_admin}", ru=f"📭 Компании без админа: {stats.companies_without_admin}", en=f"📭 Companies without admin: {stats.companies_without_admin}"),
             t(language, uz="📦 Tariflar taqsimoti:", ru="📦 Распределение тарифов:", en="📦 Plan distribution:"),
             *_format_plan_distribution(language, stats),
         ]
@@ -171,7 +97,6 @@ async def _require_super_admin_user(
         return None
 
     auth_service = AuthService(session, settings)
-
     try:
         return await auth_service.require_super_admin(message.from_user.id)
     except LanguageSelectionRequiredError:
@@ -192,7 +117,6 @@ async def _require_super_admin_user(
                 en="You do not have access to this section.",
             )
         )
-
     return None
 
 
@@ -202,7 +126,6 @@ async def _require_super_admin_callback(
     settings: Settings,
 ) -> UserDTO | None:
     auth_service = AuthService(session, settings)
-
     try:
         return await auth_service.require_super_admin(callback.from_user.id)
     except LanguageSelectionRequiredError:
@@ -225,7 +148,6 @@ async def _require_super_admin_callback(
             ),
             show_alert=True,
         )
-
     return None
 
 
@@ -250,7 +172,6 @@ async def _resolve_dashboard_message_access(
                 en="Please send /start first.",
             )
         )
-        return None, None
     except AccessDeniedError:
         try:
             return "company_admin", await auth_service.require_company_admin(message.from_user.id)
@@ -313,7 +234,7 @@ async def super_admin_panel_handler(
             )
         )
         return
-    except AccessDeniedError:
+    except AccessDeniedError as exc:
         try:
             company_access = await auth_service.require_company_admin(message.from_user.id)
         except LanguageSelectionRequiredError:
@@ -326,15 +247,39 @@ async def super_admin_panel_handler(
                 )
             )
             return
-        except AccessDeniedError as exc:
+        except AccessDeniedError:
+            try:
+                employee_access = await auth_service.require_employee(message.from_user.id)
+            except LanguageSelectionRequiredError:
+                await message.answer(
+                    t(
+                        DEFAULT_LANGUAGE,
+                        uz="Avval /start buyrug'ini yuboring.",
+                        ru="Сначала отправьте команду /start.",
+                        en="Please send /start first.",
+                    )
+                )
+                return
+            except AccessDeniedError:
+                await message.answer(
+                    t(
+                        exc.language or DEFAULT_LANGUAGE,
+                        uz="Sizda panelga kirish huquqi yo'q.",
+                        ru="У вас нет доступа к панели.",
+                        en="You do not have access to the panel.",
+                    )
+                )
+                return
+
             await message.answer(
                 t(
-                    exc.language or DEFAULT_LANGUAGE,
-                    uz="Sizda panelga kirish huquqi yo'q.",
-                    ru="У вас нет доступа к панели.",
-                    en="You do not have access to the panel.",
+                    employee_access.user.language,
+                    uz="Employee paneli",
+                    ru="Employee панель",
+                    en="Employee panel",
                 )
             )
+            await show_employee_panel(message, employee_access, session)
             return
 
         await message.answer(
@@ -359,9 +304,8 @@ async def statistics_handler(
 ) -> None:
     access_type, access = await _resolve_dashboard_message_access(message, session, settings)
     if access_type == "super_admin" and access is not None:
-        user = access
         statistics = await StatsService(session).get_company_statistics()
-        await message.answer(_format_statistics(user.language, statistics))
+        await message.answer(_format_statistics(access.language, statistics))
         return
 
     if access_type != "company_admin" or access is None:
@@ -379,15 +323,14 @@ async def settings_menu_handler(
 ) -> None:
     access_type, access = await _resolve_dashboard_message_access(message, session, settings)
     if access_type == "super_admin" and access is not None:
-        user = access
         await message.answer(
             t(
-                user.language,
+                access.language,
                 uz="Sozlamalar bo'limi",
                 ru="Раздел настроек",
                 en="Settings section",
             ),
-            reply_markup=build_super_admin_settings_keyboard(user.language),
+            reply_markup=build_super_admin_settings_keyboard(access.language),
         )
         return
 

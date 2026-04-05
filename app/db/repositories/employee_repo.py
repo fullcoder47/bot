@@ -34,6 +34,7 @@ class EmployeeRepository:
         statement = (
             select(Employee)
             .options(
+                joinedload(Employee.company),
                 joinedload(Employee.branch),
                 joinedload(Employee.department),
                 joinedload(Employee.shift),
@@ -43,6 +44,27 @@ class EmployeeRepository:
                 Employee.id == employee_id,
             )
         )
+        return await self.session.scalar(statement)
+
+    async def get_by_telegram_id(
+        self,
+        telegram_id: int,
+        *,
+        active_only: bool = False,
+    ) -> Employee | None:
+        statement = (
+            select(Employee)
+            .options(
+                joinedload(Employee.company),
+                joinedload(Employee.branch),
+                joinedload(Employee.department),
+                joinedload(Employee.shift),
+            )
+            .where(Employee.telegram_id == telegram_id)
+            .order_by(Employee.created_at.desc(), Employee.id.desc())
+        )
+        if active_only:
+            statement = statement.where(Employee.is_active.is_(True))
         return await self.session.scalar(statement)
 
     async def get_by_employee_code(self, company_id: int, employee_code: str) -> Employee | None:
@@ -112,6 +134,11 @@ class EmployeeRepository:
         employee.shift_id = payload.shift_id
         employee.hire_date = payload.hire_date
         employee.is_active = payload.is_active
+        await self.session.flush()
+        return employee
+
+    async def link_user(self, employee: Employee, user_id: int | None) -> Employee:
+        employee.user_id = user_id
         await self.session.flush()
         return employee
 

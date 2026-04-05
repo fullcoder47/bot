@@ -10,10 +10,13 @@ from app.db.base import Base, TimestampMixin
 from app.domain.enums.company_plan import CompanyPlan
 
 if TYPE_CHECKING:
+    from app.db.models.attendance_record import AttendanceRecord
+    from app.db.models.attendance_session import AttendanceSession
     from app.db.models.branch import Branch
     from app.db.models.company_admin_invite import CompanyAdminInvite
     from app.db.models.department import Department
     from app.db.models.employee import Employee
+    from app.db.models.leave_request import LeaveRequest
     from app.db.models.shift import Shift
 
 
@@ -51,6 +54,18 @@ class Company(TimestampMixin, Base):
         cascade="all, delete-orphan",
     )
     employees: Mapped[list[Employee]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    attendance_sessions: Mapped[list[AttendanceSession]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    attendance_records: Mapped[list[AttendanceRecord]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    leave_requests: Mapped[list[LeaveRequest]] = relationship(
         back_populates="company",
         cascade="all, delete-orphan",
     )

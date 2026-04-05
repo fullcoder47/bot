@@ -9,9 +9,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.db.models.attendance_record import AttendanceRecord
+    from app.db.models.attendance_session import AttendanceSession
     from app.db.models.branch import Branch
     from app.db.models.company import Company
     from app.db.models.department import Department
+    from app.db.models.leave_request import LeaveRequest
     from app.db.models.shift import Shift
     from app.db.models.user import User
 
@@ -62,3 +65,6 @@ class Employee(TimestampMixin, Base):
     branch: Mapped[Branch | None] = relationship(back_populates="employees")
     department: Mapped[Department | None] = relationship(back_populates="employees")
     shift: Mapped[Shift | None] = relationship(back_populates="employees")
+    attendance_sessions: Mapped[list[AttendanceSession]] = relationship(back_populates="employee")
+    attendance_records: Mapped[list[AttendanceRecord]] = relationship(back_populates="employee")
+    leave_requests: Mapped[list[LeaveRequest]] = relationship(back_populates="employee")

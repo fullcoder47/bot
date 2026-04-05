@@ -4,6 +4,7 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.handlers.employee_common import show_employee_panel
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
@@ -86,6 +87,20 @@ async def language_callback_handler(
             ),
             reply_markup=build_company_admin_keyboard(language),
         )
+        return
+
+    if result.status is StartFlowStatus.EMPLOYEE:
+        employee_access = await auth_service.require_employee(callback.from_user.id)
+        await callback.message.edit_text(
+            t(
+                language,
+                uz="Til saqlandi. Employee paneli tayyor.",
+                ru="Язык сохранен. Employee панель готова.",
+                en="Language saved. The employee panel is ready.",
+            ),
+            reply_markup=None,
+        )
+        await show_employee_panel(callback.message, employee_access, session)
         return
 
     await callback.message.edit_text(

@@ -45,6 +45,7 @@ class StartFlowStatus(StrEnum):
     REQUEST_LANGUAGE = "request_language"
     SUPER_ADMIN = "super_admin"
     COMPANY_ADMIN = "company_admin"
+    EMPLOYEE = "employee"
     ACCESS_DENIED = "access_denied"
 
 

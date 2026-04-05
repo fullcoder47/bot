@@ -1,3 +1,16 @@
+from app.domain.exceptions.attendance_exceptions import (
+    AttendanceAlreadyCheckedInError,
+    AttendanceAlreadyCheckedOutError,
+    AttendanceCheckOutWithoutCheckInError,
+    AttendanceError,
+    AttendanceSessionConflictError,
+    AttendanceSessionExpiredError,
+    AttendanceSessionNotFoundError,
+    BranchLocationNotConfiguredError,
+    LeaveRequestValidationError,
+    LocationVerificationFailedError,
+    VideoNoteRequiredError,
+)
 from app.domain.exceptions.auth_exceptions import (
     AccessDeniedError,
     AuthError,
@@ -33,14 +46,27 @@ from app.domain.exceptions.company_exceptions import (
     CompanyNotFoundError,
     InvalidTelegramIdError,
 )
+from app.domain.exceptions.employee_exceptions import (
+    EmployeeBranchNotAssignedError,
+    EmployeeInactiveError,
+    EmployeeShiftNotAssignedError,
+)
 
 __all__ = [
     "AccessDeniedError",
+    "AttendanceAlreadyCheckedInError",
+    "AttendanceAlreadyCheckedOutError",
+    "AttendanceCheckOutWithoutCheckInError",
+    "AttendanceError",
+    "AttendanceSessionConflictError",
+    "AttendanceSessionExpiredError",
+    "AttendanceSessionNotFoundError",
     "AuthError",
     "BranchAlreadyExistsError",
     "BranchAssignmentRequiredError",
     "BranchDeleteRestrictedError",
     "BranchNotFoundError",
+    "BranchLocationNotConfiguredError",
     "CompanyAlreadyExistsError",
     "CompanyAdminDomainError",
     "CompanyAdminAssignmentError",
@@ -51,7 +77,10 @@ __all__ = [
     "DepartmentDeleteRestrictedError",
     "DepartmentNotFoundError",
     "EmployeeAlreadyExistsError",
+    "EmployeeBranchNotAssignedError",
+    "EmployeeInactiveError",
     "EmployeeNotFoundError",
+    "EmployeeShiftNotAssignedError",
     "ForeignEntityScopeError",
     "InvalidTelegramIdError",
     "InvalidLatitudeError",
@@ -60,8 +89,11 @@ __all__ = [
     "InvalidRadiusError",
     "InvalidWorkDaysError",
     "LanguageSelectionRequiredError",
+    "LeaveRequestValidationError",
+    "LocationVerificationFailedError",
     "ShiftAlreadyExistsError",
     "ShiftDeleteRestrictedError",
     "ShiftNotFoundError",
     "UnauthorizedAccessError",
+    "VideoNoteRequiredError",
 ]

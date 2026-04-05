@@ -6,8 +6,12 @@ from app.bot.handlers.branches import router as branches_router
 from app.bot.handlers.company import router as company_router
 from app.bot.handlers.company_admin import router as company_admin_router
 from app.bot.handlers.departments import router as departments_router
+from app.bot.handlers.employee import router as employee_router
 from app.bot.handlers.employees import router as employees_router
+from app.bot.handlers.attendance import router as attendance_router
+from app.bot.handlers.history import router as history_router
 from app.bot.handlers.language import router as language_router
+from app.bot.handlers.leave import router as leave_router
 from app.bot.handlers.shifts import router as shifts_router
 from app.bot.handlers.start import router as start_router
 from app.bot.handlers.super_admin import router as super_admin_router
@@ -24,4 +28,8 @@ def build_router() -> Router:
     router.include_router(departments_router)
     router.include_router(shifts_router)
     router.include_router(employees_router)
+    router.include_router(employee_router)
+    router.include_router(leave_router)
+    router.include_router(history_router)
+    router.include_router(attendance_router)
     return router
