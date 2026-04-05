@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.keyboards.inline.company import (
     build_company_action_confirmation_keyboard,
@@ -49,6 +50,7 @@ from app.domain.dto.company_dto import (
 )
 from app.domain.dto.user_dto import UserDTO
 from app.domain.enums.company_plan import CompanyPlan
+from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.domain.exceptions.company_exceptions import (
     CompanyAdminAssignmentError,
@@ -62,6 +64,8 @@ from app.services.company_admin_service import CompanyAdminService
 from app.services.company_service import CompanyService
 
 router = Router(name="company")
+router.message.filter(RoleFilter(UserRole.SUPER_ADMIN))
+router.callback_query.filter(RoleFilter(UserRole.SUPER_ADMIN))
 
 COMPANY_PAGE_SIZE = CompanyService.DEFAULT_PAGE_SIZE
 LIST_CONTEXT_KEY = "company_list_context"

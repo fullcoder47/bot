@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.handlers.company_admin import show_employee_menu
 from app.bot.handlers.company_admin_common import require_company_admin_callback, require_company_admin_message
@@ -30,6 +31,7 @@ from app.bot.states.employee_states import EmployeeCreateStates, EmployeeEditSta
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.employee_dto import EmployeeCreateDTO, EmployeeDetailDTO, EmployeeFiltersDTO, EmployeeUpdateDTO
+from app.domain.enums.role import UserRole
 from app.domain.exceptions.company_admin_exceptions import (
     BranchAssignmentRequiredError,
     BranchNotFoundError,
@@ -44,6 +46,8 @@ from app.services.employee_service import EmployeeService
 from app.services.shift_service import ShiftService
 
 router = Router(name="employees")
+router.message.filter(RoleFilter(UserRole.COMPANY_ADMIN))
+router.callback_query.filter(RoleFilter(UserRole.COMPANY_ADMIN))
 EMPLOYEE_PAGE_SIZE = EmployeeService.DEFAULT_PAGE_SIZE
 LIST_CONTEXT_KEY = "employee_list_context"
 FILTER_DRAFT_KEY = "employee_filter_draft"

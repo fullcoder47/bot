@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
@@ -18,6 +19,7 @@ from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyStatisticsDTO, SuperAdminDashboardDTO
 from app.domain.dto.user_dto import UserDTO
+from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.services.auth_service import AuthService
 from app.services.stats_service import StatsService
@@ -302,7 +304,7 @@ async def super_admin_panel_handler(
     await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE, session)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
+@router.message(RoleFilter(UserRole.SUPER_ADMIN), StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
 async def statistics_handler(
     message: Message,
     session: AsyncSession,
@@ -316,7 +318,7 @@ async def statistics_handler(
     await message.answer(_format_statistics(user.language, statistics))
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
+@router.message(RoleFilter(UserRole.SUPER_ADMIN), StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
 async def settings_menu_handler(
     message: Message,
     session: AsyncSession,

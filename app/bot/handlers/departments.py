@@ -6,6 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.handlers.company_admin import show_department_menu
 from app.bot.handlers.company_admin_common import require_company_admin_callback, require_company_admin_message
@@ -21,6 +22,7 @@ from app.bot.states.department_states import DepartmentCreateStates, DepartmentE
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.department_dto import DepartmentCreateDTO, DepartmentDTO, DepartmentUpdateDTO
+from app.domain.enums.role import UserRole
 from app.domain.exceptions.company_admin_exceptions import (
     DepartmentAlreadyExistsError,
     DepartmentDeleteRestrictedError,
@@ -29,6 +31,8 @@ from app.domain.exceptions.company_admin_exceptions import (
 from app.services.department_service import DepartmentService
 
 router = Router(name="departments")
+router.message.filter(RoleFilter(UserRole.COMPANY_ADMIN))
+router.callback_query.filter(RoleFilter(UserRole.COMPANY_ADMIN))
 DEPARTMENT_PAGE_SIZE = DepartmentService.DEFAULT_PAGE_SIZE
 
 
