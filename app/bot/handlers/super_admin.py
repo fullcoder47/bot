@@ -6,8 +6,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
+from app.bot.handlers.company_admin_common import format_company_admin_dashboard, require_company_admin_message
 from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import (
@@ -19,7 +19,6 @@ from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyStatisticsDTO, SuperAdminDashboardDTO
 from app.domain.dto.user_dto import UserDTO
-from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.services.auth_service import AuthService
 from app.services.stats_service import StatsService
@@ -229,6 +228,53 @@ async def _require_super_admin_callback(
     return None
 
 
+async def _resolve_dashboard_message_access(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+):
+    if message.from_user is None:
+        return None, None
+
+    auth_service = AuthService(session, settings)
+
+    try:
+        return "super_admin", await auth_service.require_super_admin(message.from_user.id)
+    except LanguageSelectionRequiredError:
+        await message.answer(
+            t(
+                DEFAULT_LANGUAGE,
+                uz="Avval /start buyrug'ini yuboring.",
+                ru="Сначала отправьте команду /start.",
+                en="Please send /start first.",
+            )
+        )
+        return None, None
+    except AccessDeniedError:
+        try:
+            return "company_admin", await auth_service.require_company_admin(message.from_user.id)
+        except LanguageSelectionRequiredError:
+            await message.answer(
+                t(
+                    DEFAULT_LANGUAGE,
+                    uz="Avval /start buyrug'ini yuboring.",
+                    ru="Сначала отправьте команду /start.",
+                    en="Please send /start first.",
+                )
+            )
+        except AccessDeniedError as exc:
+            await message.answer(
+                t(
+                    exc.language or DEFAULT_LANGUAGE,
+                    uz="Sizda bu bo'limga kirish huquqi yo'q.",
+                    ru="У вас нет доступа к этому разделу.",
+                    en="You do not have access to this section.",
+                )
+            )
+
+    return None, None
+
+
 async def _show_super_admin_panel(
     message: Message,
     language,
@@ -304,38 +350,57 @@ async def super_admin_panel_handler(
     await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE, session)
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
+@router.message(StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
 async def statistics_handler(
     message: Message,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    user = await _require_super_admin_user(message, session, settings)
-    if user is None:
+    access_type, access = await _resolve_dashboard_message_access(message, session, settings)
+    if access_type == "super_admin" and access is not None:
+        user = access
+        statistics = await StatsService(session).get_company_statistics()
+        await message.answer(_format_statistics(user.language, statistics))
         return
 
-    statistics = await StatsService(session).get_company_statistics()
-    await message.answer(_format_statistics(user.language, statistics))
+    if access_type != "company_admin" or access is None:
+        return
+
+    stats = await StatsService(session).get_company_admin_statistics(access.company.id)
+    await message.answer(format_company_admin_dashboard(access.user.language, access.company.name, stats))
 
 
-@router.message(RoleFilter(UserRole.SUPER_ADMIN), StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
+@router.message(StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
 async def settings_menu_handler(
     message: Message,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
-    user = await _require_super_admin_user(message, session, settings)
-    if user is None:
+    access_type, access = await _resolve_dashboard_message_access(message, session, settings)
+    if access_type == "super_admin" and access is not None:
+        user = access
+        await message.answer(
+            t(
+                user.language,
+                uz="Sozlamalar bo'limi",
+                ru="Раздел настроек",
+                en="Settings section",
+            ),
+            reply_markup=build_super_admin_settings_keyboard(user.language),
+        )
+        return
+
+    if access_type != "company_admin" or access is None:
         return
 
     await message.answer(
-        t(
-            user.language,
-            uz="Sozlamalar bo'limi",
-            ru="Раздел настроек",
-            en="Settings section",
-        ),
-        reply_markup=build_super_admin_settings_keyboard(user.language),
+        "\n".join(
+            [
+                t(access.user.language, uz="Sozlamalar bo'limi", ru="Раздел настроек", en="Settings section"),
+                t(access.user.language, uz="• Tilni o'zgartirish keyingi bosqichda kengaytiriladi.", ru="• Смена языка будет расширена на следующем этапе.", en="• Change language will be expanded in the next stage."),
+                t(access.user.language, uz="• Kompaniya ma'lumotlari bo'limi keyingi bosqichga tayyorlangan.", ru="• Раздел данных компании подготовлен для следующего этапа.", en="• Company information settings are prepared for the next stage."),
+            ]
+        )
     )
 
 

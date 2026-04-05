@@ -6,7 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.handlers.company_admin import show_branch_menu
 from app.bot.handlers.company_admin_common import require_company_admin_callback, require_company_admin_message
@@ -27,7 +26,6 @@ from app.bot.states.branch_states import BranchCreateStates, BranchEditStates, B
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.branch_dto import BranchCreateDTO, BranchDTO, BranchUpdateDTO
-from app.domain.enums.role import UserRole
 from app.domain.exceptions.company_admin_exceptions import (
     BranchAlreadyExistsError,
     BranchDeleteRestrictedError,
@@ -39,8 +37,6 @@ from app.domain.exceptions.company_admin_exceptions import (
 from app.services.branch_service import BranchService
 
 router = Router(name="branches")
-router.message.filter(RoleFilter(UserRole.COMPANY_ADMIN))
-router.callback_query.filter(RoleFilter(UserRole.COMPANY_ADMIN))
 BRANCH_PAGE_SIZE = BranchService.DEFAULT_PAGE_SIZE
 
 

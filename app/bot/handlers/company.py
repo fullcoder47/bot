@@ -8,8 +8,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
+from app.bot.handlers.company_admin_common import require_company_admin_message, show_company_admin_panel
 from app.bot.keyboards.inline.company import (
     build_company_action_confirmation_keyboard,
     build_company_create_plan_keyboard,
@@ -50,7 +50,6 @@ from app.domain.dto.company_dto import (
 )
 from app.domain.dto.user_dto import UserDTO
 from app.domain.enums.company_plan import CompanyPlan
-from app.domain.enums.role import UserRole
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.domain.exceptions.company_exceptions import (
     CompanyAdminAssignmentError,
@@ -64,8 +63,6 @@ from app.services.company_admin_service import CompanyAdminService
 from app.services.company_service import CompanyService
 
 router = Router(name="company")
-router.message.filter(RoleFilter(UserRole.SUPER_ADMIN))
-router.callback_query.filter(RoleFilter(UserRole.SUPER_ADMIN))
 
 COMPANY_PAGE_SIZE = CompanyService.DEFAULT_PAGE_SIZE
 LIST_CONTEXT_KEY = "company_list_context"
@@ -694,11 +691,35 @@ async def company_filters_entry_handler(message: Message, state: FSMContext, ses
 
 @router.message(StateFilter(None), LocalizedTextFilter(*company_menu_back_button_texts()))
 async def company_menu_back_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
-    user = await _require_super_admin_message(message, session, settings)
-    if user is None:
+    if message.from_user is None:
         return
+
+    auth_service = AuthService(session, settings)
+
+    try:
+        user = await auth_service.require_super_admin(message.from_user.id)
+        await state.clear()
+        await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE)
+        return
+    except LanguageSelectionRequiredError:
+        await message.answer(
+            t(
+                DEFAULT_LANGUAGE,
+                uz="Avval /start buyrug'ini yuboring.",
+                ru="Сначала отправьте команду /start.",
+                en="Please send /start first.",
+            )
+        )
+        return
+    except AccessDeniedError:
+        pass
+
+    access = await require_company_admin_message(message, session, settings)
+    if access is None:
+        return
+
     await state.clear()
-    await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE)
+    await show_company_admin_panel(message, access, session)
 
 
 @router.callback_query(CompanyCreateStates.waiting_for_plan, F.data == "company:create:back")

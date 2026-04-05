@@ -6,7 +6,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.bot.filters.role import RoleFilter
 from app.bot.filters.text import LocalizedTextFilter
 from app.bot.handlers.company_admin_common import (
     format_company_admin_dashboard,
@@ -37,12 +36,9 @@ from app.bot.keyboards.reply.company_admin import (
 )
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
-from app.domain.enums.role import UserRole
 from app.services.stats_service import StatsService
 
 router = Router(name="company_admin")
-router.message.filter(RoleFilter(UserRole.COMPANY_ADMIN))
-router.callback_query.filter(RoleFilter(UserRole.COMPANY_ADMIN))
 
 
 async def show_employee_menu(message: Message, language) -> None:
