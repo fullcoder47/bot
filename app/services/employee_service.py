@@ -35,6 +35,7 @@ from app.domain.exceptions.company_admin_exceptions import (
     ForeignEntityScopeError,
     InvalidPhoneError,
 )
+from app.services.branch_service import BranchService
 
 
 class EmployeeService:
@@ -293,7 +294,12 @@ class EmployeeService:
             branch_name=employee.branch.name,
             latitude=employee.branch.latitude,
             longitude=employee.branch.longitude,
-            allowed_radius_meters=employee.branch.allowed_radius_meters,
+            allowed_radius_meters=(
+                employee.branch.allowed_radius_meters
+                or BranchService.DEFAULT_ALLOWED_RADIUS_METERS
+                if employee.branch.latitude is not None and employee.branch.longitude is not None
+                else employee.branch.allowed_radius_meters
+            ),
             is_location_strict=employee.branch.is_location_strict,
         )
 

@@ -24,6 +24,7 @@ from app.domain.exceptions.attendance_exceptions import (
     LocationVerificationFailedError,
 )
 from app.domain.exceptions.employee_exceptions import EmployeeBranchNotAssignedError
+from app.services.branch_service import BranchService
 
 
 def _app_tz():
@@ -181,12 +182,15 @@ class AttendanceSessionService:
         if (
             branch.latitude is None
             or branch.longitude is None
-            or branch.allowed_radius_meters is None
         ):
             attendance_session.status = AttendanceSessionStatus.REJECTED
             attendance_session.failure_reason = "branch_location_not_configured"
             await self.session.commit()
             raise BranchLocationNotConfiguredError()
+
+        allowed_radius_meters = (
+            branch.allowed_radius_meters or BranchService.DEFAULT_ALLOWED_RADIUS_METERS
+        )
 
         distance_to_branch_m = self.haversine_distance_m(
             latitude,
@@ -199,7 +203,7 @@ class AttendanceSessionService:
         attendance_session.location_accuracy = accuracy
         attendance_session.distance_to_branch_m = distance_to_branch_m
 
-        if distance_to_branch_m > branch.allowed_radius_meters:
+        if distance_to_branch_m > allowed_radius_meters:
             attendance_session.status = AttendanceSessionStatus.REJECTED
             attendance_session.failure_reason = "outside_allowed_radius"
             attendance_session.is_location_verified = False
@@ -208,7 +212,10 @@ class AttendanceSessionService:
                 action="attendance_location_failed",
                 entity_type="attendance_session",
                 entity_id=attendance_session.id,
-                metadata_json={"distance_to_branch_m": distance_to_branch_m},
+                metadata_json={
+                    "distance_to_branch_m": distance_to_branch_m,
+                    "allowed_radius_meters": allowed_radius_meters,
+                },
             )
             await self.session.commit()
             raise LocationVerificationFailedError()
@@ -223,7 +230,10 @@ class AttendanceSessionService:
             action="attendance_location_verified",
             entity_type="attendance_session",
             entity_id=attendance_session.id,
-            metadata_json={"distance_to_branch_m": distance_to_branch_m},
+            metadata_json={
+                "distance_to_branch_m": distance_to_branch_m,
+                "allowed_radius_meters": allowed_radius_meters,
+            },
         )
         await self.session.commit()
         return AttendanceLocationResultDTO(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +11,7 @@ from app.bot.handlers.employee_common import (
     format_today_status,
     require_employee_callback,
     require_employee_message,
+    show_employee_panel,
 )
 from app.bot.keyboards.reply.employee import (
     build_employee_cancel_keyboard,
@@ -135,7 +135,15 @@ async def _show_session_prompt(
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*check_in_button_texts()))
+async def _restore_employee_panel_after_error(
+    message: Message,
+    access,
+    session: AsyncSession,
+) -> None:
+    await show_employee_panel(message, access, session)
+
+
+@router.message(LocalizedTextFilter(*check_in_button_texts()))
 async def employee_check_in_handler(
     message: Message,
     state: FSMContext,
@@ -146,6 +154,7 @@ async def employee_check_in_handler(
     if access is None:
         return
 
+    await state.clear()
     attendance_service = AttendanceService(session)
     try:
         result = await attendance_service.start_check_in(access)
@@ -156,7 +165,7 @@ async def employee_check_in_handler(
     await _show_session_prompt(message, state, result, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*check_out_button_texts()))
+@router.message(LocalizedTextFilter(*check_out_button_texts()))
 async def employee_check_out_handler(
     message: Message,
     state: FSMContext,
@@ -167,6 +176,7 @@ async def employee_check_out_handler(
     if access is None:
         return
 
+    await state.clear()
     attendance_service = AttendanceService(session)
     try:
         result = await attendance_service.start_check_out(access)
@@ -177,9 +187,10 @@ async def employee_check_out_handler(
     await _show_session_prompt(message, state, result, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*today_status_button_texts()))
+@router.message(LocalizedTextFilter(*today_status_button_texts()))
 async def employee_today_status_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
@@ -187,6 +198,7 @@ async def employee_today_status_handler(
     if access is None:
         return
 
+    await state.clear()
     today_status = await AttendanceService(session).get_today_status(access)
     await message.answer(format_today_status(access.user.language, today_status))
 
@@ -214,6 +226,7 @@ async def employee_cancel_open_session_handler(
                 en="No open attendance session was found.",
             )
         )
+        await _restore_employee_panel_after_error(message, access, session)
         return
 
     await attendance_service.cancel_open_session(access, open_session.id)
@@ -226,6 +239,7 @@ async def employee_cancel_open_session_handler(
             en="The attendance session was cancelled.",
         )
     )
+    await _restore_employee_panel_after_error(message, access, session)
 
 
 @router.message(F.location)
@@ -241,7 +255,8 @@ async def employee_location_submission_handler(
 
     attendance_service = AttendanceService(session)
     open_session = await attendance_service.get_open_session(access)
-    if open_session is None or open_session.status is not AttendanceSessionStatus.PENDING_LOCATION:
+    if open_session is None:
+        await state.clear()
         await message.answer(
             t(
                 access.user.language,
@@ -250,6 +265,38 @@ async def employee_location_submission_handler(
                 en="Start a check-in or check-out before sending your location.",
             )
         )
+        await _restore_employee_panel_after_error(message, access, session)
+        return
+
+    if open_session.status is AttendanceSessionStatus.PENDING_VIDEO:
+        await state.set_state(AttendanceSessionStates.waiting_for_video)
+        await message.answer(
+            "\n".join(
+                [
+                    t(
+                        access.user.language,
+                        uz="Joylashuv allaqachon tasdiqlangan. Endi dumaloq video yuboring.",
+                        ru="Локация уже подтверждена. Теперь отправьте video note.",
+                        en="The location is already verified. Now send the video note.",
+                    ),
+                    format_open_session(access.user.language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_cancel_keyboard(access.user.language or DEFAULT_LANGUAGE),
+        )
+        return
+
+    if open_session.status is not AttendanceSessionStatus.PENDING_LOCATION:
+        await state.clear()
+        await message.answer(
+            t(
+                access.user.language,
+                uz="Joylashuv qabul qilinmadi. Attendance sessionni qaytadan boshlang.",
+                ru="Локация не была принята. Запустите attendance заново.",
+                en="The location was not accepted. Please start the attendance flow again.",
+            )
+        )
+        await _restore_employee_panel_after_error(message, access, session)
         return
 
     try:
@@ -263,6 +310,7 @@ async def employee_location_submission_handler(
     except Exception as exc:
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
+        await _restore_employee_panel_after_error(message, access, session)
         return
 
     await state.set_state(AttendanceSessionStates.waiting_for_video)
@@ -293,6 +341,68 @@ async def employee_location_submission_handler(
     )
 
 
+@router.message(AttendanceSessionStates.waiting_for_location)
+async def employee_waiting_location_fallback_handler(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_employee_message(message, session, settings)
+    if access is None:
+        return
+
+    attendance_service = AttendanceService(session)
+    open_session = await attendance_service.get_open_session(access)
+    if open_session is None:
+        await state.clear()
+        await message.answer(
+            t(
+                access.user.language,
+                uz="Ochiq attendance session topilmadi. Qaytadan boshlang.",
+                ru="Открытая attendance-сессия не найдена. Начните заново.",
+                en="No open attendance session was found. Please start again.",
+            )
+        )
+        await _restore_employee_panel_after_error(message, access, session)
+        return
+
+    if open_session.status is AttendanceSessionStatus.PENDING_VIDEO:
+        await state.set_state(AttendanceSessionStates.waiting_for_video)
+        await message.answer(
+            "\n".join(
+                [
+                    t(
+                        access.user.language,
+                        uz="Joylashuv bosqichi allaqachon tugagan. Endi dumaloq video yuboring.",
+                        ru="Этап локации уже завершен. Теперь отправьте video note.",
+                        en="The location step is already complete. Now send the video note.",
+                    ),
+                    format_open_session(access.user.language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_cancel_keyboard(access.user.language or DEFAULT_LANGUAGE),
+        )
+        return
+
+    if open_session.status is not AttendanceSessionStatus.PENDING_LOCATION:
+        return
+
+    await message.answer(
+        "\n".join(
+            [
+                t(
+                    access.user.language,
+                    uz="Joylashuv hali olinmadi. Telegramdagi joylashuv yuborish tugmasidan foydalaning.",
+                    ru="Локация еще не получена. Используйте кнопку отправки геолокации в Telegram.",
+                    en="The location has not been received yet. Use the Telegram location share button.",
+                ),
+                format_open_session(access.user.language, open_session),
+            ]
+        ),
+        reply_markup=build_employee_location_keyboard(access.user.language or DEFAULT_LANGUAGE),
+    )
+
+
 @router.message(F.video_note)
 async def employee_video_note_submission_handler(
     message: Message,
@@ -306,7 +416,8 @@ async def employee_video_note_submission_handler(
 
     attendance_service = AttendanceService(session)
     open_session = await attendance_service.get_open_session(access)
-    if open_session is None or open_session.status is not AttendanceSessionStatus.PENDING_VIDEO:
+    if open_session is None:
+        await state.clear()
         await message.answer(
             t(
                 access.user.language,
@@ -315,6 +426,38 @@ async def employee_video_note_submission_handler(
                 en="Verify the location first, then send the video note.",
             )
         )
+        await _restore_employee_panel_after_error(message, access, session)
+        return
+
+    if open_session.status is AttendanceSessionStatus.PENDING_LOCATION:
+        await state.set_state(AttendanceSessionStates.waiting_for_location)
+        await message.answer(
+            "\n".join(
+                [
+                    t(
+                        access.user.language,
+                        uz="Avval joylashuvingiz yuborilishi kerak. So'ng video note yuborasiz.",
+                        ru="Сначала нужно отправить геолокацию. Затем уже video note.",
+                        en="You need to send your location first. After that, send the video note.",
+                    ),
+                    format_open_session(access.user.language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_location_keyboard(access.user.language or DEFAULT_LANGUAGE),
+        )
+        return
+
+    if open_session.status is not AttendanceSessionStatus.PENDING_VIDEO:
+        await state.clear()
+        await message.answer(
+            t(
+                access.user.language,
+                uz="Video note qabul qilinmadi. Attendance sessionni qaytadan boshlang.",
+                ru="Video note не был принят. Запустите attendance заново.",
+                en="The video note was not accepted. Please start the attendance flow again.",
+            )
+        )
+        await _restore_employee_panel_after_error(message, access, session)
         return
 
     try:
@@ -328,6 +471,7 @@ async def employee_video_note_submission_handler(
     except Exception as exc:
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
+        await _restore_employee_panel_after_error(message, access, session)
         return
 
     await state.clear()
@@ -343,6 +487,68 @@ async def employee_video_note_submission_handler(
                 format_today_status(access.user.language, today_status),
             ]
         )
+    )
+
+
+@router.message(AttendanceSessionStates.waiting_for_video)
+async def employee_waiting_video_fallback_handler(
+    message: Message,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_employee_message(message, session, settings)
+    if access is None:
+        return
+
+    attendance_service = AttendanceService(session)
+    open_session = await attendance_service.get_open_session(access)
+    if open_session is None:
+        await state.clear()
+        await message.answer(
+            t(
+                access.user.language,
+                uz="Ochiq attendance session topilmadi. Qaytadan boshlang.",
+                ru="Открытая attendance-сессия не найдена. Начните заново.",
+                en="No open attendance session was found. Please start again.",
+            )
+        )
+        await _restore_employee_panel_after_error(message, access, session)
+        return
+
+    if open_session.status is AttendanceSessionStatus.PENDING_LOCATION:
+        await state.set_state(AttendanceSessionStates.waiting_for_location)
+        await message.answer(
+            "\n".join(
+                [
+                    t(
+                        access.user.language,
+                        uz="Avval joylashuv yuboring. Video note keyin yuboriladi.",
+                        ru="Сначала отправьте геолокацию. Video note отправляется после этого.",
+                        en="Send the location first. The video note comes after that.",
+                    ),
+                    format_open_session(access.user.language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_location_keyboard(access.user.language or DEFAULT_LANGUAGE),
+        )
+        return
+
+    if open_session.status is not AttendanceSessionStatus.PENDING_VIDEO:
+        return
+
+    await message.answer(
+        "\n".join(
+            [
+                t(
+                    access.user.language,
+                    uz="Endi dumaloq video yuborilishi kerak. Oddiy matn yoki boshqa fayl qabul qilinmaydi.",
+                    ru="Теперь нужно отправить video note. Обычный текст или другой файл не подходят.",
+                    en="Now you need to send a video note. Plain text or another file type will not work.",
+                ),
+                format_open_session(access.user.language, open_session),
+            ]
+        ),
+        reply_markup=build_employee_cancel_keyboard(access.user.language or DEFAULT_LANGUAGE),
     )
 
 

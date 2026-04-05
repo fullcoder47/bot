@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,9 +30,10 @@ def _format_history_list_header(language, page: int, total_pages: int) -> str:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*history_button_texts()))
+@router.message(LocalizedTextFilter(*history_button_texts()))
 async def employee_history_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
@@ -40,6 +41,7 @@ async def employee_history_handler(
     if access is None:
         return
 
+    await state.clear()
     history_page = await AttendanceService(session).get_history(access, page=1)
     if not history_page.items:
         await message.answer(

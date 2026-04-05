@@ -20,6 +20,7 @@ from app.domain.exceptions.company_admin_exceptions import (
 
 class BranchService:
     DEFAULT_PAGE_SIZE = 5
+    DEFAULT_ALLOWED_RADIUS_METERS = 200
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -95,6 +96,18 @@ class BranchService:
         if latitude is None and longitude is None and radius is not None:
             raise InvalidRadiusError()
 
+    @classmethod
+    def normalize_location_fields(
+        cls,
+        latitude: float | None,
+        longitude: float | None,
+        radius: int | None,
+    ) -> tuple[float | None, float | None, int | None]:
+        cls.validate_location_fields(latitude, longitude, radius)
+        if latitude is None and longitude is None:
+            return None, None, None
+        return latitude, longitude, radius or cls.DEFAULT_ALLOWED_RADIUS_METERS
+
     async def create_branch(
         self,
         company_id: int,
@@ -106,16 +119,20 @@ class BranchService:
             raise BranchAlreadyExistsError("")
 
         await self.ensure_name_available(company_id, normalized_name)
-        self.validate_location_fields(payload.latitude, payload.longitude, payload.allowed_radius_meters)
+        latitude, longitude, radius = self.normalize_location_fields(
+            payload.latitude,
+            payload.longitude,
+            payload.allowed_radius_meters,
+        )
 
         branch = await self.branch_repo.create(
             company_id,
             BranchCreateDTO(
                 name=normalized_name,
                 address=self.normalize_optional_text(payload.address or ""),
-                latitude=payload.latitude,
-                longitude=payload.longitude,
-                allowed_radius_meters=payload.allowed_radius_meters,
+                latitude=latitude,
+                longitude=longitude,
+                allowed_radius_meters=radius,
                 is_location_strict=payload.is_location_strict,
                 is_active=payload.is_active,
             ),
@@ -147,16 +164,20 @@ class BranchService:
             raise BranchAlreadyExistsError("")
 
         await self.ensure_name_available(company_id, normalized_name, exclude_branch_id=branch.id)
-        self.validate_location_fields(payload.latitude, payload.longitude, payload.allowed_radius_meters)
+        latitude, longitude, radius = self.normalize_location_fields(
+            payload.latitude,
+            payload.longitude,
+            payload.allowed_radius_meters,
+        )
 
         updated_branch = await self.branch_repo.update(
             branch,
             BranchUpdateDTO(
                 name=normalized_name,
                 address=self.normalize_optional_text(payload.address or ""),
-                latitude=payload.latitude,
-                longitude=payload.longitude,
-                allowed_radius_meters=payload.allowed_radius_meters,
+                latitude=latitude,
+                longitude=longitude,
+                allowed_radius_meters=radius,
                 is_location_strict=payload.is_location_strict,
                 is_active=payload.is_active,
             ),

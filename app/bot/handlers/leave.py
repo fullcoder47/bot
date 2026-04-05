@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from aiogram import F, Router
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -81,7 +80,7 @@ async def _cancel_leave_flow(
     await show_employee_panel(message, access, session)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*leave_request_button_texts()))
+@router.message(LocalizedTextFilter(*leave_request_button_texts()))
 async def leave_request_entry_handler(
     message: Message,
     state: FSMContext,

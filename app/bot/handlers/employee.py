@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from aiogram import Router
-from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,13 +26,15 @@ def _rules_text(language) -> str:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*rules_button_texts()))
+@router.message(LocalizedTextFilter(*rules_button_texts()))
 async def employee_rules_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_employee_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await message.answer(_rules_text(access.user.language))
