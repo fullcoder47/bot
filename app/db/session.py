@@ -19,7 +19,16 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 
 
 async def init_db(engine: AsyncEngine) -> None:
-    from app.db.models import AuditLog, Company, CompanyAdminInvite, User  # noqa: F401
+    from app.db.models import (  # noqa: F401
+        AuditLog,
+        Branch,
+        Company,
+        CompanyAdminInvite,
+        Department,
+        Employee,
+        Shift,
+        User,
+    )
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

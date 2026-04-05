@@ -10,7 +10,11 @@ from app.db.base import Base, TimestampMixin
 from app.domain.enums.company_plan import CompanyPlan
 
 if TYPE_CHECKING:
+    from app.db.models.branch import Branch
     from app.db.models.company_admin_invite import CompanyAdminInvite
+    from app.db.models.department import Department
+    from app.db.models.employee import Employee
+    from app.db.models.shift import Shift
 
 
 class Company(TimestampMixin, Base):
@@ -32,5 +36,21 @@ class Company(TimestampMixin, Base):
     admin_invite: Mapped[CompanyAdminInvite | None] = relationship(
         back_populates="company",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    branches: Mapped[list[Branch]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    departments: Mapped[list[Department]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    shifts: Mapped[list[Shift]] = relationship(
+        back_populates="company",
+        cascade="all, delete-orphan",
+    )
+    employees: Mapped[list[Employee]] = relationship(
+        back_populates="company",
         cascade="all, delete-orphan",
     )
