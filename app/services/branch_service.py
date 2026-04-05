@@ -63,6 +63,14 @@ class BranchService:
         return longitude
 
     @staticmethod
+    def parse_shared_location(latitude: float, longitude: float) -> tuple[float, float]:
+        if latitude < -90 or latitude > 90:
+            raise InvalidLatitudeError()
+        if longitude < -180 or longitude > 180:
+            raise InvalidLongitudeError()
+        return float(latitude), float(longitude)
+
+    @staticmethod
     def parse_optional_radius(value: str) -> int | None:
         normalized = " ".join(value.split()).strip()
         if not normalized or normalized == "-":

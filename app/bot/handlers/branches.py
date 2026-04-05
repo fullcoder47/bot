@@ -18,6 +18,7 @@ from app.bot.keyboards.inline.common import build_confirmation_keyboard, build_y
 from app.bot.keyboards.reply.company_admin import (
     add_branch_button_texts,
     back_button_texts,
+    build_branch_location_input_keyboard,
     branch_list_button_texts,
     build_company_admin_flow_back_keyboard,
 )
@@ -78,7 +79,46 @@ async def _show_branch_list(message: Message, service: BranchService, company_id
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*add_branch_button_texts()))
+async def _handle_shared_location_input(
+    message: Message,
+    state: FSMContext,
+    language,
+    next_state,
+) -> bool:
+    if message.location is None:
+        return False
+
+    try:
+        latitude, longitude = BranchService.parse_shared_location(
+            message.location.latitude,
+            message.location.longitude,
+        )
+    except (InvalidLatitudeError, InvalidLongitudeError):
+        await message.answer(
+            t(
+                language,
+                uz="Yuborilgan joylashuv noto'g'ri. Qayta yuboring.",
+                ru="Отправленная локация некорректна. Отправьте снова.",
+                en="The shared location is invalid. Please send it again.",
+            )
+        )
+        return True
+
+    await state.update_data(latitude=latitude, longitude=longitude)
+    await state.set_state(next_state)
+    await message.answer(
+        t(
+            language,
+            uz="Joylashuv qabul qilindi. Endi radiusni yuboring yoki `-` yuboring.",
+            ru="Локация принята. Теперь отправьте радиус или `-`.",
+            en="Location received. Now send the radius or `-`.",
+        ),
+        reply_markup=build_company_admin_flow_back_keyboard(language),
+    )
+    return True
+
+
+@router.message(LocalizedTextFilter(*add_branch_button_texts()))
 async def add_branch_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
@@ -91,11 +131,12 @@ async def add_branch_entry_handler(message: Message, state: FSMContext, session:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*branch_list_button_texts()))
-async def branch_list_handler(message: Message, session: AsyncSession, settings: Settings) -> None:
+@router.message(LocalizedTextFilter(*branch_list_button_texts()))
+async def branch_list_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await _show_branch_list(message, BranchService(session), access.company.id, access.user.language)
 
 
@@ -120,11 +161,23 @@ async def branch_list_handler(message: Message, session: AsyncSession, settings:
     LocalizedTextFilter(*back_button_texts()),
 )
 @router.message(
+    BranchCreateStates.waiting_for_strict,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    BranchCreateStates.waiting_for_confirmation,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
     BranchEditStates.waiting_for_name,
     LocalizedTextFilter(*back_button_texts()),
 )
 @router.message(
     BranchEditStates.waiting_for_address,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    BranchEditStates.waiting_for_confirmation,
     LocalizedTextFilter(*back_button_texts()),
 )
 @router.message(
@@ -137,6 +190,14 @@ async def branch_list_handler(message: Message, session: AsyncSession, settings:
 )
 @router.message(
     BranchLocationStates.waiting_for_radius,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    BranchLocationStates.waiting_for_strict,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    BranchLocationStates.waiting_for_confirmation,
     LocalizedTextFilter(*back_button_texts()),
 )
 async def branch_flow_back_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
@@ -171,7 +232,8 @@ async def branch_create_address_handler(message: Message, state: FSMContext, ses
     await state.update_data(address=BranchService.normalize_optional_text(message.text or ""))
     await state.set_state(BranchCreateStates.waiting_for_latitude)
     await message.answer(
-        t(access.user.language, uz="Latitude yuboring yoki `-` yuboring.", ru="Отправьте latitude или `-`.", en="Send latitude or `-`."),
+        t(access.user.language, uz="Latitude yuboring, Telegram orqali joylashuv ulashing yoki `-` yuboring.", ru="Отправьте latitude, поделитесь геолокацией через Telegram или отправьте `-`.", en="Send latitude, share a Telegram location, or send `-`."),
+        reply_markup=build_branch_location_input_keyboard(access.user.language),
     )
 
 
@@ -179,6 +241,13 @@ async def branch_create_address_handler(message: Message, state: FSMContext, ses
 async def branch_create_latitude_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
+        return
+    if await _handle_shared_location_input(
+        message,
+        state,
+        access.user.language,
+        BranchCreateStates.waiting_for_radius,
+    ):
         return
     try:
         latitude = BranchService.parse_optional_latitude(message.text or "")
@@ -188,7 +257,8 @@ async def branch_create_latitude_handler(message: Message, state: FSMContext, se
     await state.update_data(latitude=latitude)
     await state.set_state(BranchCreateStates.waiting_for_longitude)
     await message.answer(
-        t(access.user.language, uz="Longitude yuboring yoki `-` yuboring.", ru="Отправьте longitude или `-`.", en="Send longitude or `-`."),
+        t(access.user.language, uz="Longitude yuboring, joylashuv ulashing yoki `-` yuboring.", ru="Отправьте longitude, поделитесь локацией или отправьте `-`.", en="Send longitude, share a location, or send `-`."),
+        reply_markup=build_branch_location_input_keyboard(access.user.language),
     )
 
 
@@ -196,6 +266,13 @@ async def branch_create_latitude_handler(message: Message, state: FSMContext, se
 async def branch_create_longitude_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
+        return
+    if await _handle_shared_location_input(
+        message,
+        state,
+        access.user.language,
+        BranchCreateStates.waiting_for_radius,
+    ):
         return
     data = await state.get_data()
     try:
@@ -490,8 +567,8 @@ async def branch_location_entry_handler(callback: CallbackQuery, state: FSMConte
     await state.set_state(BranchLocationStates.waiting_for_latitude)
     await callback.answer()
     await callback.message.answer(
-        t(access.user.language, uz="Yangi latitude yuboring yoki `-` yuboring.", ru="Отправьте новый latitude или `-`.", en="Send the new latitude or `-`."),
-        reply_markup=build_company_admin_flow_back_keyboard(access.user.language),
+        t(access.user.language, uz="Yangi latitude yuboring, joylashuv ulashing yoki `-` yuboring.", ru="Отправьте новый latitude, поделитесь локацией или отправьте `-`.", en="Send the new latitude, share a location, or send `-`."),
+        reply_markup=build_branch_location_input_keyboard(access.user.language),
     )
 
 
@@ -500,6 +577,13 @@ async def branch_location_latitude_handler(message: Message, state: FSMContext, 
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    if await _handle_shared_location_input(
+        message,
+        state,
+        access.user.language,
+        BranchLocationStates.waiting_for_radius,
+    ):
+        return
     try:
         latitude = BranchService.parse_optional_latitude(message.text or "")
     except InvalidLatitudeError:
@@ -507,13 +591,23 @@ async def branch_location_latitude_handler(message: Message, state: FSMContext, 
         return
     await state.update_data(latitude=latitude)
     await state.set_state(BranchLocationStates.waiting_for_longitude)
-    await message.answer(t(access.user.language, uz="Yangi longitude yuboring yoki `-` yuboring.", ru="Отправьте новый longitude или `-`.", en="Send the new longitude or `-`.")) 
+    await message.answer(
+        t(access.user.language, uz="Yangi longitude yuboring, joylashuv ulashing yoki `-` yuboring.", ru="Отправьте новый longitude, поделитесь локацией или отправьте `-`.", en="Send the new longitude, share a location, or send `-`."),
+        reply_markup=build_branch_location_input_keyboard(access.user.language),
+    )
 
 
 @router.message(BranchLocationStates.waiting_for_longitude)
 async def branch_location_longitude_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
+        return
+    if await _handle_shared_location_input(
+        message,
+        state,
+        access.user.language,
+        BranchLocationStates.waiting_for_radius,
+    ):
         return
     data = await state.get_data()
     try:

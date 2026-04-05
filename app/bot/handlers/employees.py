@@ -138,11 +138,12 @@ async def _show_employee_list(
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*add_employee_button_texts()))
+@router.message(LocalizedTextFilter(*add_employee_button_texts()))
 async def add_employee_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     branches = await BranchService(session).list_branch_options(access.company.id, active_only=True)
     if not branches:
         await message.answer(
@@ -157,20 +158,22 @@ async def add_employee_entry_handler(message: Message, state: FSMContext, sessio
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*employee_list_button_texts()))
+@router.message(LocalizedTextFilter(*employee_list_button_texts()))
 async def employee_list_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await _set_list_filters(state, EmployeeFiltersDTO())
     await _show_employee_list(message, EmployeeService(session), access.company.id, access.user.language, state)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*employee_search_button_texts()))
+@router.message(LocalizedTextFilter(*employee_search_button_texts()))
 async def employee_search_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await state.set_state(EmployeeSearchStates.waiting_for_query)
     await message.answer(
         t(access.user.language, uz="Qidiruv matnini yuboring. F.I.Sh, kod yoki Telegram ID bo'yicha qidiriladi.", ru="Отправьте поисковый запрос. Поиск работает по Ф.И.О., коду или Telegram ID.", en="Send the search query. Search works by full name, code, or Telegram ID."),
@@ -178,12 +181,13 @@ async def employee_search_entry_handler(message: Message, state: FSMContext, ses
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*employee_filters_button_texts()))
+@router.message(LocalizedTextFilter(*employee_filters_button_texts()))
 async def employee_filter_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
     current_filters = await _get_list_filters(state)
+    await state.clear()
     await _set_filter_draft(state, current_filters)
     await message.answer(
         t(access.user.language, uz="Ishchilar filterlari", ru="Фильтры сотрудников", en="Employee filters"),
@@ -212,7 +216,23 @@ async def employee_filter_entry_handler(message: Message, state: FSMContext, ses
     LocalizedTextFilter(*back_button_texts()),
 )
 @router.message(
+    EmployeeCreateStates.waiting_for_branch,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    EmployeeCreateStates.waiting_for_department,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    EmployeeCreateStates.waiting_for_shift,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
     EmployeeCreateStates.waiting_for_hire_date,
+    LocalizedTextFilter(*back_button_texts()),
+)
+@router.message(
+    EmployeeCreateStates.waiting_for_confirmation,
     LocalizedTextFilter(*back_button_texts()),
 )
 @router.message(

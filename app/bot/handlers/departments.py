@@ -42,7 +42,7 @@ def _format_department_detail(language, department: DepartmentDTO) -> str:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*add_department_button_texts()))
+@router.message(LocalizedTextFilter(*add_department_button_texts()))
 async def add_department_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
@@ -55,11 +55,12 @@ async def add_department_entry_handler(message: Message, state: FSMContext, sess
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*department_list_button_texts()))
-async def department_list_handler(message: Message, session: AsyncSession, settings: Settings) -> None:
+@router.message(LocalizedTextFilter(*department_list_button_texts()))
+async def department_list_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     page = await DepartmentService(session).list_departments(access.company.id, page=1, page_size=DEPARTMENT_PAGE_SIZE)
     await message.answer(
         t(access.user.language, uz=f"Bo'limlar ro'yxati ({page.page}/{page.total_pages})", ru=f"Список отделов ({page.page}/{page.total_pages})", en=f"Department list ({page.page}/{page.total_pages})"),
@@ -68,7 +69,9 @@ async def department_list_handler(message: Message, session: AsyncSession, setti
 
 
 @router.message(DepartmentCreateStates.waiting_for_name, LocalizedTextFilter(*back_button_texts()))
+@router.message(DepartmentCreateStates.waiting_for_confirmation, LocalizedTextFilter(*back_button_texts()))
 @router.message(DepartmentEditStates.waiting_for_name, LocalizedTextFilter(*back_button_texts()))
+@router.message(DepartmentEditStates.waiting_for_confirmation, LocalizedTextFilter(*back_button_texts()))
 async def department_back_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:

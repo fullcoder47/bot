@@ -34,6 +34,15 @@ def back_button_text(language: LanguageCode | str | None) -> str:
     return t(language, uz="⬅️ Orqaga", ru="⬅️ Назад", en="⬅️ Back")
 
 
+def share_location_button_text(language: LanguageCode | str | None) -> str:
+    return t(
+        language,
+        uz="📍 Joylashuv ulashish",
+        ru="📍 Отправить локацию",
+        en="📍 Share location",
+    )
+
+
 def add_employee_button_text(language: LanguageCode | str | None) -> str:
     return t(language, uz="➕ Ishchi qo'shish", ru="➕ Добавить сотрудника", en="➕ Add employee")
 
@@ -153,6 +162,16 @@ def build_shift_menu_keyboard(language: LanguageCode | str | None) -> ReplyKeybo
 def build_company_admin_flow_back_keyboard(language: LanguageCode | str | None) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text=back_button_text(language))]],
+        resize_keyboard=True,
+    )
+
+
+def build_branch_location_input_keyboard(language: LanguageCode | str | None) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=share_location_button_text(language), request_location=True)],
+            [KeyboardButton(text=back_button_text(language))],
+        ],
         resize_keyboard=True,
     )
 

@@ -49,7 +49,7 @@ def _format_shift_detail(language, shift: ShiftDTO) -> str:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*add_shift_button_texts()))
+@router.message(LocalizedTextFilter(*add_shift_button_texts()))
 async def add_shift_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
@@ -83,11 +83,12 @@ async def shift_edit_entry_handler(callback: CallbackQuery, state: FSMContext, s
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*shift_list_button_texts()))
-async def shift_list_handler(message: Message, session: AsyncSession, settings: Settings) -> None:
+@router.message(LocalizedTextFilter(*shift_list_button_texts()))
+async def shift_list_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     page = await ShiftService(session).list_shifts(access.company.id, page=1, page_size=SHIFT_PAGE_SIZE)
     await message.answer(
         t(access.user.language, uz=f"Smenalar ro'yxati ({page.page}/{page.total_pages})", ru=f"Список смен ({page.page}/{page.total_pages})", en=f"Shift list ({page.page}/{page.total_pages})"),
@@ -101,6 +102,7 @@ async def shift_list_handler(message: Message, session: AsyncSession, settings: 
 @router.message(ShiftCreateStates.waiting_for_late_after, LocalizedTextFilter(*back_button_texts()))
 @router.message(ShiftCreateStates.waiting_for_early_before, LocalizedTextFilter(*back_button_texts()))
 @router.message(ShiftCreateStates.waiting_for_work_days, LocalizedTextFilter(*back_button_texts()))
+@router.message(ShiftCreateStates.waiting_for_confirmation, LocalizedTextFilter(*back_button_texts()))
 async def shift_back_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:

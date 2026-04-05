@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from aiogram import F, Router
 from aiogram.filters import StateFilter
+from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,57 +69,66 @@ async def show_shift_menu(message: Message, language) -> None:
     )
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*employees_button_texts()))
+@router.message(LocalizedTextFilter(*employees_button_texts()))
 async def employees_menu_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await show_employee_menu(message, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*branches_button_texts()))
+@router.message(LocalizedTextFilter(*branches_button_texts()))
 async def branches_menu_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await show_branch_menu(message, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*departments_button_texts()))
+@router.message(LocalizedTextFilter(*departments_button_texts()))
 async def departments_menu_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await show_department_menu(message, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*shifts_button_texts()))
+@router.message(LocalizedTextFilter(*shifts_button_texts()))
 async def shifts_menu_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await show_shift_menu(message, access.user.language or DEFAULT_LANGUAGE)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
+@router.message(LocalizedTextFilter(*statistics_button_texts()))
 async def company_admin_statistics_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
@@ -126,13 +136,15 @@ async def company_admin_statistics_handler(
     if access is None:
         return
 
+    await state.clear()
     stats = await StatsService(session).get_company_admin_statistics(access.company.id)
     await message.answer(format_company_admin_dashboard(access.user.language, access.company.name, stats))
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
+@router.message(LocalizedTextFilter(*settings_button_texts()))
 async def company_admin_settings_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
@@ -140,6 +152,7 @@ async def company_admin_settings_handler(
     if access is None:
         return
 
+    await state.clear()
     await message.answer(
         "\n".join(
             [
@@ -159,24 +172,28 @@ async def company_admin_settings_handler(
 )
 async def company_admin_back_to_panel_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    await state.clear()
     await show_company_admin_panel(message, access, session)
 
 
 @router.callback_query(F.data == "employee:menu")
 async def employee_menu_callback_handler(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None:
         return
+    await state.clear()
     await callback.answer()
     await callback.message.edit_text(
         t(access.user.language, uz="Ishchilar menyusiga qayting.", ru="Вернитесь в меню сотрудников.", en="Return to the employees menu.")
@@ -187,12 +204,14 @@ async def employee_menu_callback_handler(
 @router.callback_query(F.data == "branch:menu")
 async def branch_menu_callback_handler(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None:
         return
+    await state.clear()
     await callback.answer()
     await callback.message.edit_text(
         t(access.user.language, uz="Filiallar menyusiga qayting.", ru="Вернитесь в меню филиалов.", en="Return to the branches menu.")
@@ -203,12 +222,14 @@ async def branch_menu_callback_handler(
 @router.callback_query(F.data == "department:menu")
 async def department_menu_callback_handler(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None:
         return
+    await state.clear()
     await callback.answer()
     await callback.message.edit_text(
         t(access.user.language, uz="Bo'limlar menyusiga qayting.", ru="Вернитесь в меню отделов.", en="Return to the departments menu.")
@@ -219,12 +240,14 @@ async def department_menu_callback_handler(
 @router.callback_query(F.data == "shift:menu")
 async def shift_menu_callback_handler(
     callback: CallbackQuery,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None:
         return
+    await state.clear()
     await callback.answer()
     await callback.message.edit_text(
         t(access.user.language, uz="Smenalar menyusiga qayting.", ru="Вернитесь в меню смен.", en="Return to the shifts menu.")
