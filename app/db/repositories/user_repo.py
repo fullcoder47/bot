@@ -42,10 +42,16 @@ class UserRepository:
         await self.session.flush()
         return user
 
+    async def update_phone(self, user: User, phone: str | None) -> User:
+        user.phone = phone
+        await self.session.flush()
+        return user
+
     async def update_profile_fields(self, user: User, payload: TelegramUserDTO) -> User:
         user.full_name = payload.full_name
         user.username = payload.username
-        user.phone = payload.phone
+        if payload.phone is not None:
+            user.phone = payload.phone
         await self.session.flush()
         return user
 

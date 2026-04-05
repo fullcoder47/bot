@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.text import LocalizedTextFilter
+from app.bot.handlers.company_admin import show_company_admin_settings_menu
 from app.bot.handlers.company_admin_common import format_company_admin_dashboard, require_company_admin_message
 from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
@@ -393,15 +394,7 @@ async def settings_menu_handler(
     if access_type != "company_admin" or access is None:
         return
 
-    await message.answer(
-        "\n".join(
-            [
-                t(access.user.language, uz="Sozlamalar bo'limi", ru="Раздел настроек", en="Settings section"),
-                t(access.user.language, uz="• Tilni o'zgartirish keyingi bosqichda kengaytiriladi.", ru="• Смена языка будет расширена на следующем этапе.", en="• Change language will be expanded in the next stage."),
-                t(access.user.language, uz="• Kompaniya ma'lumotlari bo'limi keyingi bosqichga tayyorlangan.", ru="• Раздел данных компании подготовлен для следующего этапа.", en="• Company information settings are prepared for the next stage."),
-            ]
-        )
-    )
+    await show_company_admin_settings_menu(message, access, session)
 
 
 @router.callback_query(F.data == "superadmin:settings:language")
