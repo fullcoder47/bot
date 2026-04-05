@@ -181,7 +181,7 @@ async def department_detail_handler(callback: CallbackQuery, session: AsyncSessi
     )
 
 
-@router.callback_query(F.data.startswith("department:edit:"))
+@router.callback_query(F.data.regexp(r"^department:edit:\d+:\d+$"))
 async def department_edit_entry_handler(callback: CallbackQuery, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None or callback.data is None:

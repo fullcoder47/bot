@@ -421,7 +421,7 @@ async def branch_detail_callback_handler(callback: CallbackQuery, session: Async
     )
 
 
-@router.callback_query(F.data.startswith("branch:edit:"))
+@router.callback_query(F.data.regexp(r"^branch:edit:\d+:\d+$"))
 async def branch_edit_entry_handler(callback: CallbackQuery, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None or callback.data is None:
@@ -551,7 +551,7 @@ async def branch_edit_cancel_handler(callback: CallbackQuery, state: FSMContext,
     )
 
 
-@router.callback_query(F.data.startswith("branch:location:"))
+@router.callback_query(F.data.regexp(r"^branch:location:\d+:\d+$"))
 async def branch_location_entry_handler(callback: CallbackQuery, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None or callback.data is None:
