@@ -117,7 +117,7 @@ class EmployeeDetailDTO:
 
 @dataclass(slots=True, frozen=True)
 class EmployeeListPageDTO:
-    items: list[EmployeeDTO]
+    items: list[EmployeeDetailDTO]
     page: int
     page_size: int
     total_items: int

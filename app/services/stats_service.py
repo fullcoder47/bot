@@ -2,14 +2,19 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.repositories.branch_repo import BranchRepository
 from app.db.repositories.company_admin_invite_repo import CompanyAdminInviteRepository
 from app.db.repositories.company_repo import CompanyRepository
+from app.db.repositories.department_repo import DepartmentRepository
+from app.db.repositories.employee_repo import EmployeeRepository
+from app.db.repositories.shift_repo import ShiftRepository
 from app.domain.dto.company_dto import (
     CompanyDTO,
     CompanyStatisticsDTO,
     PlanDistributionDTO,
     SuperAdminDashboardDTO,
 )
+from app.domain.dto.employee_dto import CompanyAdminStatisticsDTO
 from app.domain.enums.company_plan import CompanyPlan
 
 
@@ -18,6 +23,10 @@ class StatsService:
         self.session = session
         self.company_repo = CompanyRepository(session)
         self.company_admin_repo = CompanyAdminInviteRepository(session)
+        self.branch_repo = BranchRepository(session)
+        self.department_repo = DepartmentRepository(session)
+        self.shift_repo = ShiftRepository(session)
+        self.employee_repo = EmployeeRepository(session)
 
     async def get_company_statistics(self) -> CompanyStatisticsDTO:
         plan_distribution = await self._get_plan_distribution()
@@ -62,4 +71,21 @@ class StatsService:
             free=free_count,
             basic=basic_count,
             pro=pro_count,
+        )
+
+    async def get_company_admin_statistics(self, company_id: int) -> CompanyAdminStatisticsDTO:
+        total_employees = await self.employee_repo.count_total(company_id)
+        active_employees = await self.employee_repo.count_active(company_id)
+        inactive_employees = await self.employee_repo.count_inactive(company_id)
+        total_branches = await self.branch_repo.count_by_company(company_id)
+        total_departments = await self.department_repo.count_by_company(company_id)
+        total_shifts = await self.shift_repo.count_by_company(company_id)
+
+        return CompanyAdminStatisticsDTO(
+            total_employees=total_employees,
+            active_employees=active_employees,
+            inactive_employees=inactive_employees,
+            total_branches=total_branches,
+            total_departments=total_departments,
+            total_shifts=total_shifts,
         )
