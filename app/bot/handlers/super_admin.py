@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from aiogram import F, Router
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.text import LocalizedTextFilter
-from app.bot.handlers.company_admin import show_company_admin_settings_menu
+from app.bot.handlers.company_admin import (
+    show_company_admin_settings_menu,
+    show_company_admin_statistics_menu,
+)
 from app.bot.handlers.company_admin_common import format_company_admin_dashboard
 from app.bot.handlers.employee_common import show_employee_panel
 from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
@@ -296,12 +299,14 @@ async def super_admin_panel_handler(
     await _show_super_admin_panel(message, user.language or DEFAULT_LANGUAGE, session)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*statistics_button_texts()))
+@router.message(LocalizedTextFilter(*statistics_button_texts()))
 async def statistics_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
+    await state.clear()
     access_type, access = await _resolve_dashboard_message_access(message, session, settings)
     if access_type == "super_admin" and access is not None:
         statistics = await StatsService(session).get_company_statistics()
@@ -311,16 +316,17 @@ async def statistics_handler(
     if access_type != "company_admin" or access is None:
         return
 
-    stats = await StatsService(session).get_company_admin_statistics(access.company.id)
-    await message.answer(format_company_admin_dashboard(access.user.language, access.company.name, stats))
+    await show_company_admin_statistics_menu(message, access, session)
 
 
-@router.message(StateFilter(None), LocalizedTextFilter(*settings_button_texts()))
+@router.message(LocalizedTextFilter(*settings_button_texts()))
 async def settings_menu_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
+    await state.clear()
     access_type, access = await _resolve_dashboard_message_access(message, session, settings)
     if access_type == "super_admin" and access is not None:
         await message.answer(

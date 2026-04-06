@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.filters.text import LocalizedTextFilter
@@ -10,6 +11,9 @@ from app.bot.handlers.company_admin_common import (
     require_company_admin_callback,
     require_company_admin_message,
     show_company_admin_panel,
+)
+from app.bot.keyboards.inline.company_admin_attendance import (
+    build_company_admin_statistics_keyboard,
 )
 from app.bot.keyboards.inline.company_admin_settings import (
     build_company_admin_language_keyboard,
@@ -26,6 +30,8 @@ from app.bot.keyboards.reply.company_admin import (
     build_shift_menu_keyboard,
     departments_button_texts,
     employees_button_texts,
+    settings_button_texts,
+    statistics_button_texts,
     shifts_button_texts,
 )
 from app.bot.states.company_admin_settings_states import CompanyAdminSettingsStates
@@ -34,6 +40,7 @@ from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyAdminAccessDTO, CompanyDetailDTO
 from app.domain.enums.language import LanguageCode
 from app.domain.exceptions.company_admin_exceptions import InvalidPhoneError
+from app.services.attendance_export_service import AttendanceExportService
 from app.services.auth_service import AuthService
 from app.services.company_admin_settings_service import CompanyAdminSettingsService
 from app.services.stats_service import StatsService
@@ -364,6 +371,28 @@ async def show_company_admin_settings_menu(
     )
 
 
+async def show_company_admin_statistics_menu(
+    message: Message,
+    access: CompanyAdminAccessDTO,
+    session: AsyncSession,
+) -> None:
+    stats = await StatsService(session).get_company_admin_statistics(access.company.id)
+    await message.answer(
+        _format_company_stats_summary(
+            access,
+            total_employees=stats.total_employees,
+            active_employees=stats.active_employees,
+            inactive_employees=stats.inactive_employees,
+            total_branches=stats.total_branches,
+            total_departments=stats.total_departments,
+            total_shifts=stats.total_shifts,
+        ),
+        reply_markup=build_company_admin_statistics_keyboard(
+            access.user.language or DEFAULT_LANGUAGE,
+        ),
+    )
+
+
 async def _edit_company_admin_settings_menu(
     message: Message,
     access: CompanyAdminAccessDTO,
@@ -434,6 +463,56 @@ async def shifts_menu_handler(
         return
     await state.clear()
     await show_shift_menu(message, access.user.language or DEFAULT_LANGUAGE)
+
+
+@router.message(LocalizedTextFilter(*statistics_button_texts()))
+async def company_admin_statistics_handler(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_company_admin_message(message, session, settings)
+    if access is None:
+        return
+    await state.clear()
+    await show_company_admin_statistics_menu(message, access, session)
+
+
+@router.message(LocalizedTextFilter(*settings_button_texts()))
+async def company_admin_settings_handler(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_company_admin_message(message, session, settings)
+    if access is None:
+        return
+    await state.clear()
+    await show_company_admin_settings_menu(message, access, session)
+
+
+@router.message(StateFilter(None), LocalizedTextFilter(*back_button_texts()))
+async def company_admin_back_to_panel_handler(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_company_admin_message(message, session, settings)
+    if access is None:
+        return
+    await state.clear()
+    await message.answer(
+        t(
+            access.user.language,
+            uz="Company admin paneliga qaytdingiz.",
+            ru="Вы вернулись в панель company admin.",
+            en="You are back in the company admin panel.",
+        )
+    )
+    await show_company_admin_panel(message, access, session)
 
 
 @router.message(CompanyAdminSettingsStates.waiting_for_phone, LocalizedTextFilter(*back_button_texts()))
@@ -702,6 +781,63 @@ async def company_admin_settings_back_handler(
     if access is None or callback.message is None:
         return
     await state.clear()
+    await callback.answer()
+    await callback.message.edit_text(
+        t(
+            access.user.language,
+            uz="Company admin paneliga qaytdingiz.",
+            ru="Вы вернулись в панель company admin.",
+            en="You are back in the company admin panel.",
+        )
+    )
+    await show_company_admin_panel(callback.message, access, session)
+
+
+@router.callback_query(F.data.startswith("companyadmin:attendance_export:"))
+async def company_admin_attendance_export_handler(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_company_admin_callback(callback, session, settings)
+    if access is None or callback.message is None or callback.data is None:
+        return
+
+    preset = callback.data.rsplit(":", 1)[-1]
+    export_service = AttendanceExportService(session)
+    file_name, file_bytes, row_count = await export_service.export_company_attendance(
+        access,
+        preset=preset,
+    )
+
+    await callback.answer(
+        t(
+            access.user.language,
+            uz=f"Excel hisobot tayyor. Yozuvlar: {row_count}",
+            ru=f"Excel-отчет готов. Записей: {row_count}",
+            en=f"The Excel report is ready. Rows: {row_count}",
+        )
+    )
+    await callback.message.answer_document(
+        BufferedInputFile(file_bytes, filename=file_name),
+        caption=t(
+            access.user.language,
+            uz=f"Attendance Excel hisobot. Jami yozuvlar: {row_count}",
+            ru=f"Excel-отчет attendance. Всего записей: {row_count}",
+            en=f"Attendance Excel report. Total rows: {row_count}",
+        ),
+    )
+
+
+@router.callback_query(F.data == "companyadmin:statistics:back")
+async def company_admin_statistics_back_handler(
+    callback: CallbackQuery,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    access = await require_company_admin_callback(callback, session, settings)
+    if access is None or callback.message is None:
+        return
     await callback.answer()
     await callback.message.edit_text(
         t(

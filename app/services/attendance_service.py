@@ -123,17 +123,23 @@ class AttendanceService:
         file_id: str,
         file_unique_id: str,
     ) -> tuple[AttendanceSessionDTO, AttendanceRecordDTO]:
-        session = await self.attendance_session_service.attach_video_note(
-            access,
-            session_id,
-            file_id=file_id,
-            file_unique_id=file_unique_id,
-        )
-        if session.session_type is AttendanceSessionType.CHECK_IN:
-            record = await self._finalize_check_in(access, session)
-        else:
-            record = await self._finalize_check_out(access, session)
-        return session, record
+        try:
+            session = await self.attendance_session_service.attach_video_note(
+                access,
+                session_id,
+                file_id=file_id,
+                file_unique_id=file_unique_id,
+                commit=False,
+            )
+            if session.session_type is AttendanceSessionType.CHECK_IN:
+                record = await self._finalize_check_in(access, session, commit=False)
+            else:
+                record = await self._finalize_check_out(access, session, commit=False)
+            await self.session.commit()
+            return session, record
+        except Exception:
+            await self.session.rollback()
+            raise
 
     async def get_today_status(self, access: EmployeeAccessDTO) -> AttendanceTodayStatusDTO:
         await self.attendance_session_service.expire_old_sessions(access.employee.id)
@@ -204,6 +210,8 @@ class AttendanceService:
         self,
         access: EmployeeAccessDTO,
         session: AttendanceSessionDTO,
+        *,
+        commit: bool = True,
     ) -> AttendanceRecordDTO:
         today = self.attendance_session_service.today()
         record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, today)
@@ -231,13 +239,19 @@ class AttendanceService:
             entity_id=record.id,
             metadata_json={"session_id": session.id, "late_minutes": late_minutes},
         )
-        await self.session.commit()
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
+        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     async def _finalize_check_out(
         self,
         access: EmployeeAccessDTO,
         session: AttendanceSessionDTO,
+        *,
+        commit: bool = True,
     ) -> AttendanceRecordDTO:
         today = self.attendance_session_service.today()
         record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, today)
@@ -269,7 +283,11 @@ class AttendanceService:
                 "early_leave_minutes": early_leave_minutes,
             },
         )
-        await self.session.commit()
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
+        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     @staticmethod

@@ -249,6 +249,7 @@ class AttendanceSessionService:
         *,
         file_id: str,
         file_unique_id: str,
+        commit: bool = True,
     ) -> AttendanceSessionDTO:
         attendance_session = await self._get_owned_session(access.employee.id, session_id)
         if attendance_session.status is not AttendanceSessionStatus.PENDING_VIDEO:
@@ -272,7 +273,10 @@ class AttendanceSessionService:
             entity_id=attendance_session.id,
             metadata_json={"session_type": attendance_session.session_type.value},
         )
-        await self.session.commit()
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
         return AttendanceSessionDTO.from_model(attendance_session)
 
     async def _get_owned_session(self, employee_id: int, session_id: int):

@@ -4,8 +4,10 @@ from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from app.db.models.attendance_record import AttendanceRecord
+from app.db.models.employee import Employee
 from app.domain.enums.attendance_status import AttendanceStatus
 
 
@@ -41,6 +43,33 @@ class AttendanceRecordRepository:
     async def update(self, record: AttendanceRecord) -> AttendanceRecord:
         await self.session.flush()
         return record
+
+    async def list_for_company_period(
+        self,
+        company_id: int,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[AttendanceRecord]:
+        statement = (
+            select(AttendanceRecord)
+            .options(
+                joinedload(AttendanceRecord.employee).joinedload(Employee.branch),
+                joinedload(AttendanceRecord.employee).joinedload(Employee.shift),
+            )
+            .where(AttendanceRecord.company_id == company_id)
+        )
+        if date_from is not None:
+            statement = statement.where(AttendanceRecord.date >= date_from)
+        if date_to is not None:
+            statement = statement.where(AttendanceRecord.date <= date_to)
+        statement = statement.order_by(
+            AttendanceRecord.date.desc(),
+            AttendanceRecord.check_in_time.desc(),
+            AttendanceRecord.id.desc(),
+        )
+        result = await self.session.scalars(statement)
+        return list(result.unique().all())
 
     async def list_history_paginated(
         self,
