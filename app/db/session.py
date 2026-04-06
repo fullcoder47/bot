@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
@@ -35,3 +36,20 @@ async def init_db(engine: AsyncEngine) -> None:
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        if connection.dialect.name == "postgresql":
+            await connection.execute(
+                text(
+                    """
+                    ALTER TABLE attendance_sessions
+                    ALTER COLUMN video_note_file_id TYPE TEXT
+                    """
+                )
+            )
+            await connection.execute(
+                text(
+                    """
+                    ALTER TABLE attendance_sessions
+                    ALTER COLUMN video_note_file_unique_id TYPE TEXT
+                    """
+                )
+            )

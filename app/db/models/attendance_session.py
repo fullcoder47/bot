@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -53,8 +53,8 @@ class AttendanceSession(TimestampMixin, Base):
     location_accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
     distance_to_branch_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_location_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    video_note_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    video_note_file_unique_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    video_note_file_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    video_note_file_unique_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_video_received: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

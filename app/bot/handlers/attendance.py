@@ -344,6 +344,7 @@ async def employee_location_submission_handler(
 @router.message(AttendanceSessionStates.waiting_for_location)
 async def employee_waiting_location_fallback_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
@@ -493,6 +494,7 @@ async def employee_video_note_submission_handler(
 @router.message(AttendanceSessionStates.waiting_for_video)
 async def employee_waiting_video_fallback_handler(
     message: Message,
+    state: FSMContext,
     session: AsyncSession,
     settings: Settings,
 ) -> None:
