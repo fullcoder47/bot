@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -45,6 +47,7 @@ from app.domain.exceptions.employee_exceptions import (
 from app.services.attendance_service import AttendanceService
 
 router = Router(name="attendance")
+logger = logging.getLogger(__name__)
 
 
 def _session_type_label(language, session_type: AttendanceSessionType) -> str:
@@ -143,6 +146,14 @@ async def _restore_employee_panel_after_error(
     await show_employee_panel(message, access, session)
 
 
+def _extract_video_file_ids(message: Message) -> tuple[str, str] | None:
+    if message.video_note is not None:
+        return message.video_note.file_id, message.video_note.file_unique_id
+    if message.video is not None:
+        return message.video.file_id, message.video.file_unique_id
+    return None
+
+
 @router.message(LocalizedTextFilter(*check_in_button_texts()))
 async def employee_check_in_handler(
     message: Message,
@@ -159,6 +170,8 @@ async def employee_check_in_handler(
     try:
         result = await attendance_service.start_check_in(access)
     except Exception as exc:
+        logger.exception("Employee check-in start failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
         await message.answer(_attendance_error_text(access.user.language, exc))
         return
 
@@ -181,6 +194,8 @@ async def employee_check_out_handler(
     try:
         result = await attendance_service.start_check_out(access)
     except Exception as exc:
+        logger.exception("Employee check-out start failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
         await message.answer(_attendance_error_text(access.user.language, exc))
         return
 
@@ -229,7 +244,14 @@ async def employee_cancel_open_session_handler(
         await _restore_employee_panel_after_error(message, access, session)
         return
 
-    await attendance_service.cancel_open_session(access, open_session.id)
+    try:
+        await attendance_service.cancel_open_session(access, open_session.id)
+    except Exception as exc:
+        logger.exception("Employee cancel session failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
+        await message.answer(_attendance_error_text(access.user.language, exc))
+        await _restore_employee_panel_after_error(message, access, session)
+        return
     await state.clear()
     await message.answer(
         t(
@@ -308,6 +330,8 @@ async def employee_location_submission_handler(
             accuracy=getattr(message.location, "horizontal_accuracy", None),
         )
     except Exception as exc:
+        logger.exception("Employee location submission failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
         await _restore_employee_panel_after_error(message, access, session)
@@ -405,6 +429,7 @@ async def employee_waiting_location_fallback_handler(
 
 
 @router.message(F.video_note)
+@router.message(F.video)
 async def employee_video_note_submission_handler(
     message: Message,
     state: FSMContext,
@@ -412,7 +437,8 @@ async def employee_video_note_submission_handler(
     settings: Settings,
 ) -> None:
     access = await require_employee_message(message, session, settings)
-    if access is None or message.video_note is None:
+    file_ids = _extract_video_file_ids(message)
+    if access is None or file_ids is None:
         return
 
     attendance_service = AttendanceService(session)
@@ -465,11 +491,13 @@ async def employee_video_note_submission_handler(
         completed_session, _record = await attendance_service.submit_video_note(
             access,
             open_session.id,
-            file_id=message.video_note.file_id,
-            file_unique_id=message.video_note.file_unique_id,
+            file_id=file_ids[0],
+            file_unique_id=file_ids[1],
         )
         today_status = await attendance_service.get_today_status(access)
     except Exception as exc:
+        logger.exception("Employee video submission failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
         await _restore_employee_panel_after_error(message, access, session)
@@ -570,6 +598,8 @@ async def employee_cancel_session_callback_handler(
     try:
         await attendance_service.cancel_open_session(access, session_id)
     except Exception as exc:
+        logger.exception("Employee cancel session callback failed for telegram_id=%s", access.user.telegram_id)
+        await session.rollback()
         await callback.answer(_attendance_error_text(access.user.language, exc), show_alert=True)
         return
 
