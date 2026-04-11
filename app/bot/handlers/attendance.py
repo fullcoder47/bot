@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,7 @@ from app.bot.handlers.employee_common import (
     show_employee_panel,
 )
 from app.bot.keyboards.reply.employee import (
+    build_employee_keyboard,
     build_employee_cancel_keyboard,
     build_employee_location_keyboard,
     cancel_button_texts,
@@ -79,7 +81,12 @@ def _attendance_error_text(language, error: Exception) -> str:
         return t(language, uz="Mos attendance session topilmadi.", ru="Подходящая attendance-сессия не найдена.", en="The matching attendance session was not found.")
     if isinstance(error, AccessDeniedError):
         return t(language, uz="Sizda bu amal uchun ruxsat yo'q.", ru="У вас нет доступа к этому действию.", en="You do not have access to this action.")
-    return t(language, uz="Attendance amali bajarilmadi.", ru="Не удалось выполнить attendance-действие.", en="Could not complete the attendance action.")
+    return t(
+        language,
+        uz="Attendance amali bajarilmadi. Qayta urinib ko'ring. Muammo davom etsa admin bilan bog'laning.",
+        ru="Не удалось выполнить attendance-действие. Попробуйте еще раз. Если проблема повторится, свяжитесь с админом.",
+        en="Could not complete the attendance action. Please try again. If the problem continues, contact the admin.",
+    )
 
 
 async def _show_session_prompt(
@@ -144,6 +151,59 @@ async def _restore_employee_panel_after_error(
     session: AsyncSession,
 ) -> None:
     await show_employee_panel(message, access, session)
+
+
+async def _restore_open_session_after_failure(
+    message: Message,
+    state: FSMContext,
+    access,
+    attendance_service: AttendanceService,
+    error: Exception,
+) -> bool:
+    language = access.user.language or DEFAULT_LANGUAGE
+    open_session = await attendance_service.get_open_session(access)
+    if open_session is None:
+        return False
+
+    if open_session.status is AttendanceSessionStatus.PENDING_LOCATION:
+        await state.set_state(AttendanceSessionStates.waiting_for_location)
+        await message.answer(
+            "\n".join(
+                [
+                    _attendance_error_text(language, error),
+                    t(
+                        language,
+                        uz="Session hali ochiq. Joylashuvni qayta yuborishingiz mumkin.",
+                        ru="Сессия все еще открыта. Вы можете повторно отправить локацию.",
+                        en="The session is still open. You can resend your location.",
+                    ),
+                    format_open_session(language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_location_keyboard(language),
+        )
+        return True
+
+    if open_session.status is AttendanceSessionStatus.PENDING_VIDEO:
+        await state.set_state(AttendanceSessionStates.waiting_for_video)
+        await message.answer(
+            "\n".join(
+                [
+                    _attendance_error_text(language, error),
+                    t(
+                        language,
+                        uz="Session hali ochiq. Endi dumaloq videoni qayta yuborishingiz mumkin.",
+                        ru="Сессия все еще открыта. Теперь можно повторно отправить video note.",
+                        en="The session is still open. You can resend the video note now.",
+                    ),
+                    format_open_session(language, open_session),
+                ]
+            ),
+            reply_markup=build_employee_cancel_keyboard(language),
+        )
+        return True
+
+    return False
 
 
 def _extract_video_file_ids(message: Message) -> tuple[str, str] | None:
@@ -264,7 +324,8 @@ async def employee_cancel_open_session_handler(
     await _restore_employee_panel_after_error(message, access, session)
 
 
-@router.message(F.location)
+@router.message(AttendanceSessionStates.waiting_for_location, F.location)
+@router.message(StateFilter(None), F.location)
 async def employee_location_submission_handler(
     message: Message,
     state: FSMContext,
@@ -276,7 +337,11 @@ async def employee_location_submission_handler(
         return
 
     attendance_service = AttendanceService(session)
-    open_session = await attendance_service.get_open_session(access)
+    pending_location_session = await attendance_service.get_pending_session(
+        access,
+        status=AttendanceSessionStatus.PENDING_LOCATION,
+    )
+    open_session = pending_location_session or await attendance_service.get_open_session(access)
     if open_session is None:
         await state.clear()
         await message.answer(
@@ -330,8 +395,15 @@ async def employee_location_submission_handler(
             accuracy=getattr(message.location, "horizontal_accuracy", None),
         )
     except Exception as exc:
-        logger.exception("Employee location submission failed for telegram_id=%s", access.user.telegram_id)
+        logger.exception(
+            "Employee location submission failed for telegram_id=%s employee_id=%s session_id=%s",
+            access.user.telegram_id,
+            access.employee.id,
+            open_session.id,
+        )
         await session.rollback()
+        if await _restore_open_session_after_failure(message, state, access, attendance_service, exc):
+            return
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
         await _restore_employee_panel_after_error(message, access, session)
@@ -428,8 +500,10 @@ async def employee_waiting_location_fallback_handler(
     )
 
 
-@router.message(F.video_note)
-@router.message(F.video)
+@router.message(AttendanceSessionStates.waiting_for_video, F.video_note)
+@router.message(AttendanceSessionStates.waiting_for_video, F.video)
+@router.message(StateFilter(None), F.video_note)
+@router.message(StateFilter(None), F.video)
 async def employee_video_note_submission_handler(
     message: Message,
     state: FSMContext,
@@ -442,7 +516,11 @@ async def employee_video_note_submission_handler(
         return
 
     attendance_service = AttendanceService(session)
-    open_session = await attendance_service.get_open_session(access)
+    pending_video_session = await attendance_service.get_pending_session(
+        access,
+        status=AttendanceSessionStatus.PENDING_VIDEO,
+    )
+    open_session = pending_video_session or await attendance_service.get_open_session(access)
     if open_session is None:
         await state.clear()
         await message.answer(
@@ -496,8 +574,15 @@ async def employee_video_note_submission_handler(
         )
         today_status = await attendance_service.get_today_status(access)
     except Exception as exc:
-        logger.exception("Employee video submission failed for telegram_id=%s", access.user.telegram_id)
+        logger.exception(
+            "Employee video submission failed for telegram_id=%s employee_id=%s session_id=%s",
+            access.user.telegram_id,
+            access.employee.id,
+            open_session.id,
+        )
         await session.rollback()
+        if await _restore_open_session_after_failure(message, state, access, attendance_service, exc):
+            return
         await state.clear()
         await message.answer(_attendance_error_text(access.user.language, exc))
         await _restore_employee_panel_after_error(message, access, session)
@@ -515,7 +600,8 @@ async def employee_video_note_submission_handler(
                 ),
                 format_today_status(access.user.language, today_status),
             ]
-        )
+        ),
+        reply_markup=build_employee_keyboard(access.user.language or DEFAULT_LANGUAGE),
     )
 
 

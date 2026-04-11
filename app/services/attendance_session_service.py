@@ -89,6 +89,22 @@ class AttendanceSessionService:
             return None
         return AttendanceSessionDTO.from_model(session)
 
+    async def get_pending_session(
+        self,
+        employee_id: int,
+        *,
+        status: AttendanceSessionStatus,
+        session_type: AttendanceSessionType | None = None,
+    ) -> AttendanceSessionDTO | None:
+        session = await self.attendance_session_repo.get_pending_session_for_employee(
+            employee_id,
+            status=status,
+            session_type=session_type,
+        )
+        if session is None:
+            return None
+        return AttendanceSessionDTO.from_model(session)
+
     async def get_session_for_employee(
         self,
         employee_id: int,

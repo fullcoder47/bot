@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from math import ceil
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -54,6 +55,8 @@ class AttendanceService:
         self.attendance_session_service = AttendanceSessionService(session)
         self.audit_log_repo = AuditLogRepository(session)
 
+    logger = logging.getLogger(__name__)
+
     @classmethod
     def now(cls) -> datetime:
         return datetime.now(cls.APP_TZ)
@@ -95,6 +98,20 @@ class AttendanceService:
         await self.attendance_session_service.expire_old_sessions(access.employee.id)
         return await self.attendance_session_service.get_open_session(access.employee.id)
 
+    async def get_pending_session(
+        self,
+        access: EmployeeAccessDTO,
+        *,
+        status,
+        session_type: AttendanceSessionType | None = None,
+    ) -> AttendanceSessionDTO | None:
+        await self.attendance_session_service.expire_old_sessions(access.employee.id)
+        return await self.attendance_session_service.get_pending_session(
+            access.employee.id,
+            status=status,
+            session_type=session_type,
+        )
+
     async def cancel_open_session(self, access: EmployeeAccessDTO, session_id: int) -> AttendanceSessionDTO:
         return await self.attendance_session_service.cancel_session(access, session_id)
 
@@ -132,12 +149,28 @@ class AttendanceService:
                 commit=False,
             )
             if session.session_type is AttendanceSessionType.CHECK_IN:
-                record = await self._finalize_check_in(access, session, commit=False)
+                await self._finalize_check_in(access, session, commit=False)
             else:
-                record = await self._finalize_check_out(access, session, commit=False)
+                await self._finalize_check_out(access, session, commit=False)
             await self.session.commit()
-            return session, record
+            persisted_session = await self.attendance_session_service.get_session_for_employee(
+                access.employee.id,
+                session_id,
+            )
+            persisted_record = await self.attendance_record_repo.get_today_for_employee(
+                access.employee.id,
+                self.attendance_session_service.today(),
+            )
+            if persisted_record is None:
+                raise AttendanceSessionConflictError()
+            return persisted_session, AttendanceRecordDTO.from_model(persisted_record)
         except Exception:
+            self.logger.exception(
+                "Attendance video finalization failed for telegram_id=%s employee_id=%s session_id=%s",
+                access.user.telegram_id,
+                access.employee.id,
+                session_id,
+            )
             await self.session.rollback()
             raise
 
@@ -243,7 +276,6 @@ class AttendanceService:
             await self.session.commit()
         else:
             await self.session.flush()
-        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     async def _finalize_check_out(
@@ -287,7 +319,6 @@ class AttendanceService:
             await self.session.commit()
         else:
             await self.session.flush()
-        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     @staticmethod

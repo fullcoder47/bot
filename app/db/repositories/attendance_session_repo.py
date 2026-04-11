@@ -49,6 +49,15 @@ class AttendanceSessionRepository:
         return await self.session.scalar(statement)
 
     async def get_open_session_for_employee(self, employee_id: int) -> AttendanceSession | None:
+        return await self.get_filtered_open_session_for_employee(employee_id)
+
+    async def get_filtered_open_session_for_employee(
+        self,
+        employee_id: int,
+        *,
+        status: AttendanceSessionStatus | None = None,
+        session_type: AttendanceSessionType | None = None,
+    ) -> AttendanceSession | None:
         statement = (
             select(AttendanceSession)
             .options(joinedload(AttendanceSession.branch))
@@ -56,8 +65,12 @@ class AttendanceSessionRepository:
                 AttendanceSession.employee_id == employee_id,
                 AttendanceSession.status.in_(self.OPEN_STATUSES),
             )
-            .order_by(AttendanceSession.created_at.desc(), AttendanceSession.id.desc())
         )
+        if status is not None:
+            statement = statement.where(AttendanceSession.status == status)
+        if session_type is not None:
+            statement = statement.where(AttendanceSession.session_type == session_type)
+        statement = statement.order_by(AttendanceSession.created_at.desc(), AttendanceSession.id.desc())
         return await self.session.scalar(statement)
 
     async def get_pending_session_for_employee_by_type(
@@ -65,17 +78,23 @@ class AttendanceSessionRepository:
         employee_id: int,
         session_type: AttendanceSessionType,
     ) -> AttendanceSession | None:
-        statement = (
-            select(AttendanceSession)
-            .options(joinedload(AttendanceSession.branch))
-            .where(
-                AttendanceSession.employee_id == employee_id,
-                AttendanceSession.session_type == session_type,
-                AttendanceSession.status.in_(self.OPEN_STATUSES),
-            )
-            .order_by(AttendanceSession.created_at.desc(), AttendanceSession.id.desc())
+        return await self.get_filtered_open_session_for_employee(
+            employee_id,
+            session_type=session_type,
         )
-        return await self.session.scalar(statement)
+
+    async def get_pending_session_for_employee(
+        self,
+        employee_id: int,
+        *,
+        status: AttendanceSessionStatus,
+        session_type: AttendanceSessionType | None = None,
+    ) -> AttendanceSession | None:
+        return await self.get_filtered_open_session_for_employee(
+            employee_id,
+            status=status,
+            session_type=session_type,
+        )
 
     async def expire_old_sessions(
         self,
