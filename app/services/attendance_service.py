@@ -289,6 +289,7 @@ class AttendanceService:
             await self.session.commit()
         else:
             await self.session.flush()
+        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     async def _finalize_check_out(
@@ -332,6 +333,7 @@ class AttendanceService:
             await self.session.commit()
         else:
             await self.session.flush()
+        await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
     @staticmethod

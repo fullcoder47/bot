@@ -143,6 +143,7 @@ class AttendanceSessionService:
             },
         )
         await self.session.commit()
+        await self.session.refresh(attendance_session)
         return AttendanceSessionDTO.from_model(attendance_session)
 
     async def cancel_session(
@@ -167,6 +168,7 @@ class AttendanceSessionService:
             metadata_json={"session_type": attendance_session.session_type.value, "reason": reason},
         )
         await self.session.commit()
+        await self.session.refresh(attendance_session)
         return AttendanceSessionDTO.from_model(attendance_session)
 
     async def verify_location(
@@ -252,6 +254,7 @@ class AttendanceSessionService:
             },
         )
         await self.session.commit()
+        await self.session.refresh(attendance_session)
         return AttendanceLocationResultDTO(
             session=AttendanceSessionDTO.from_model(attendance_session),
             challenge_code=challenge_code,
@@ -293,6 +296,7 @@ class AttendanceSessionService:
             await self.session.commit()
         else:
             await self.session.flush()
+        await self.session.refresh(attendance_session)
         return AttendanceSessionDTO.from_model(attendance_session)
 
     async def _get_owned_session(self, employee_id: int, session_id: int):
