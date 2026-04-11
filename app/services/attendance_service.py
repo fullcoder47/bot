@@ -141,6 +141,12 @@ class AttendanceService:
         file_unique_id: str,
     ) -> tuple[AttendanceSessionDTO, AttendanceRecordDTO]:
         try:
+            self.logger.info(
+                "Attendance video finalization started: telegram_id=%s employee_id=%s session_id=%s",
+                access.user.telegram_id,
+                access.employee.id,
+                session_id,
+            )
             session = await self.attendance_session_service.attach_video_note(
                 access,
                 session_id,
@@ -163,6 +169,13 @@ class AttendanceService:
             )
             if persisted_record is None:
                 raise AttendanceSessionConflictError()
+            self.logger.info(
+                "Attendance video finalization completed: telegram_id=%s employee_id=%s session_id=%s record_id=%s",
+                access.user.telegram_id,
+                access.employee.id,
+                session_id,
+                persisted_record.id,
+            )
             return persisted_session, AttendanceRecordDTO.from_model(persisted_record)
         except Exception:
             self.logger.exception(

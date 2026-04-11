@@ -336,12 +336,26 @@ async def employee_location_submission_handler(
     if access is None or message.location is None:
         return
 
+    logger.info(
+        "Employee location update received: telegram_id=%s employee_id=%s state=%s",
+        access.user.telegram_id,
+        access.employee.id,
+        await state.get_state(),
+    )
+
     attendance_service = AttendanceService(session)
     pending_location_session = await attendance_service.get_pending_session(
         access,
         status=AttendanceSessionStatus.PENDING_LOCATION,
     )
     open_session = pending_location_session or await attendance_service.get_open_session(access)
+    logger.info(
+        "Employee location session resolved: telegram_id=%s employee_id=%s session_id=%s status=%s",
+        access.user.telegram_id,
+        access.employee.id,
+        open_session.id if open_session is not None else None,
+        open_session.status.value if open_session is not None else None,
+    )
     if open_session is None:
         await state.clear()
         await message.answer(
@@ -515,12 +529,28 @@ async def employee_video_note_submission_handler(
     if access is None or file_ids is None:
         return
 
+    logger.info(
+        "Employee video update received: telegram_id=%s employee_id=%s state=%s has_video_note=%s has_video=%s",
+        access.user.telegram_id,
+        access.employee.id,
+        await state.get_state(),
+        message.video_note is not None,
+        message.video is not None,
+    )
+
     attendance_service = AttendanceService(session)
     pending_video_session = await attendance_service.get_pending_session(
         access,
         status=AttendanceSessionStatus.PENDING_VIDEO,
     )
     open_session = pending_video_session or await attendance_service.get_open_session(access)
+    logger.info(
+        "Employee video session resolved: telegram_id=%s employee_id=%s session_id=%s status=%s",
+        access.user.telegram_id,
+        access.employee.id,
+        open_session.id if open_session is not None else None,
+        open_session.status.value if open_session is not None else None,
+    )
     if open_session is None:
         await state.clear()
         await message.answer(
@@ -571,6 +601,13 @@ async def employee_video_note_submission_handler(
             open_session.id,
             file_id=file_ids[0],
             file_unique_id=file_ids[1],
+        )
+        logger.info(
+            "Employee video finalized attendance: telegram_id=%s employee_id=%s session_id=%s session_type=%s",
+            access.user.telegram_id,
+            access.employee.id,
+            completed_session.id,
+            completed_session.session_type.value,
         )
         today_status = await attendance_service.get_today_status(access)
     except Exception as exc:
