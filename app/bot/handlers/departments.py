@@ -23,7 +23,6 @@ from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.department_dto import DepartmentCreateDTO, DepartmentDTO, DepartmentUpdateDTO
 from app.domain.exceptions.company_admin_exceptions import (
     DepartmentAlreadyExistsError,
-    DepartmentDeleteRestrictedError,
     DepartmentNotFoundError,
 )
 from app.services.department_service import DepartmentService
@@ -310,17 +309,29 @@ async def department_delete_confirm_handler(callback: CallbackQuery, session: As
     _, _, department_id_raw, page_raw = callback.data.split(":", 3)
     service = DepartmentService(session)
     try:
-        await service.delete_department(access.company.id, int(department_id_raw), actor_telegram_id=access.user.telegram_id)
-    except DepartmentDeleteRestrictedError:
-        await callback.answer(t(access.user.language, uz="Bo'limga ishchilar bog'langan. Avval ularni ko'chiring yoki bo'limni deaktiv qiling.", ru="К отделу привязаны сотрудники. Сначала перенесите их или деактивируйте отдел.", en="This department has linked employees. Move them first or deactivate the department."), show_alert=True)
-        return
+        detached_count = await service.delete_department(
+            access.company.id,
+            int(department_id_raw),
+            actor_telegram_id=access.user.telegram_id,
+        )
     except DepartmentNotFoundError:
         await callback.answer(t(access.user.language, uz="Bo'lim topilmadi.", ru="Отдел не найден.", en="Department not found."), show_alert=True)
         return
     page = await service.list_departments(access.company.id, page=int(page_raw), page_size=DEPARTMENT_PAGE_SIZE)
     await callback.answer(t(access.user.language, uz="Bo'lim o'chirildi.", ru="Отдел удалён.", en="Department deleted."))
     await callback.message.edit_text(
-        t(access.user.language, uz=f"Bo'limlar ro'yxati ({page.page}/{page.total_pages})", ru=f"Список отделов ({page.page}/{page.total_pages})", en=f"Department list ({page.page}/{page.total_pages})"),
+        "\n".join(
+            [
+                t(access.user.language, uz=f"Bo'limlar ro'yxati ({page.page}/{page.total_pages})", ru=f"Список отделов ({page.page}/{page.total_pages})", en=f"Department list ({page.page}/{page.total_pages})"),
+                t(access.user.language, uz="Bo'lim o'chirildi.", ru="Отдел удалён.", en="Department deleted."),
+                t(
+                    access.user.language,
+                    uz=f"{detached_count} ta ishchidan bo'lim biriktiruvi olib tashlandi." if detached_count else "Biriktirilgan ishchi topilmadi.",
+                    ru=f"У {detached_count} сотрудников отдел был отвязан." if detached_count else "Привязанных сотрудников не было.",
+                    en=f"Department assignment was removed from {detached_count} employees." if detached_count else "There were no linked employees.",
+                ),
+            ]
+        ),
         reply_markup=build_department_list_keyboard(page, access.user.language),
     )
 

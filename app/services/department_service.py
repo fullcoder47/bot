@@ -15,7 +15,6 @@ from app.domain.dto.department_dto import (
 )
 from app.domain.exceptions.company_admin_exceptions import (
     DepartmentAlreadyExistsError,
-    DepartmentDeleteRestrictedError,
     DepartmentNotFoundError,
 )
 
@@ -111,21 +110,27 @@ class DepartmentService:
         company_id: int,
         department_id: int,
         actor_telegram_id: int | None = None,
-    ) -> None:
+    ) -> int:
         department = await self._get_department_or_raise(company_id, department_id)
-        linked_employees = await self.employee_repo.count_by_department(company_id, department_id)
-        if linked_employees > 0:
-            raise DepartmentDeleteRestrictedError()
+        detached_employees = await self.employee_repo.clear_department_assignments(
+            company_id,
+            department_id,
+        )
 
         await self.audit_log_repo.create(
             actor_telegram_id=actor_telegram_id,
             action="department_deleted",
             entity_type="department",
             entity_id=department.id,
-            metadata_json={"company_id": company_id, "name": department.name},
+            metadata_json={
+                "company_id": company_id,
+                "name": department.name,
+                "detached_employees": detached_employees,
+            },
         )
         await self.department_repo.delete(department)
         await self.session.commit()
+        return detached_employees
 
     async def get_department(self, company_id: int, department_id: int) -> DepartmentDTO:
         department = await self._get_department_or_raise(company_id, department_id)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -46,6 +46,7 @@ from app.domain.exceptions.employee_exceptions import (
     EmployeeInactiveError,
     EmployeeShiftNotAssignedError,
 )
+from app.services.attendance_notification_service import AttendanceNotificationService
 from app.services.attendance_service import AttendanceService
 
 router = Router(name="attendance")
@@ -522,6 +523,7 @@ async def employee_video_note_submission_handler(
     message: Message,
     state: FSMContext,
     session: AsyncSession,
+    bot: Bot,
     settings: Settings,
 ) -> None:
     access = await require_employee_message(message, session, settings)
@@ -624,6 +626,22 @@ async def employee_video_note_submission_handler(
         await message.answer(_attendance_error_text(access.user.language, exc))
         await _restore_employee_panel_after_error(message, access, session)
         return
+
+    try:
+        record_for_notification = today_status.attendance_record or _record
+        await AttendanceNotificationService(session).notify_company_admin_attendance(
+            bot,
+            access=access,
+            attendance_session=completed_session,
+            attendance_record=record_for_notification,
+        )
+    except Exception:
+        logger.exception(
+            "Company admin attendance notification failed for telegram_id=%s employee_id=%s session_id=%s",
+            access.user.telegram_id,
+            access.employee.id,
+            completed_session.id,
+        )
 
     await state.clear()
     await message.answer(

@@ -22,6 +22,18 @@ class AttendanceRecordRepository:
         )
         return await self.session.scalar(statement)
 
+    async def get_open_record_for_employee(self, employee_id: int) -> AttendanceRecord | None:
+        statement = (
+            select(AttendanceRecord)
+            .where(
+                AttendanceRecord.employee_id == employee_id,
+                AttendanceRecord.check_in_time.is_not(None),
+                AttendanceRecord.check_out_time.is_(None),
+            )
+            .order_by(AttendanceRecord.date.desc(), AttendanceRecord.id.desc())
+        )
+        return await self.session.scalar(statement)
+
     async def create(
         self,
         *,

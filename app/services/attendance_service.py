@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from math import ceil
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -68,8 +68,8 @@ class AttendanceService:
             return AttendanceSessionStartResultDTO(session=open_session, resumed=True)
 
         await self._ensure_attendance_ready(access)
-        today = self.attendance_session_service.today()
-        if await self.attendance_record_repo.exists_check_in_today(access.employee.id, today):
+        target_date = self._resolve_attendance_date(access, self.now())
+        if await self.attendance_record_repo.exists_check_in_today(access.employee.id, target_date):
             raise AttendanceAlreadyCheckedInError()
 
         session = await self.attendance_session_service.create_session(access, AttendanceSessionType.CHECK_IN)
@@ -82,13 +82,10 @@ class AttendanceService:
             return AttendanceSessionStartResultDTO(session=open_session, resumed=True)
 
         await self._ensure_attendance_ready(access)
-        today_record = await self.attendance_record_repo.get_today_for_employee(
-            access.employee.id,
-            self.attendance_session_service.today(),
-        )
-        if today_record is None or today_record.check_in_time is None:
+        open_record = await self.attendance_record_repo.get_open_record_for_employee(access.employee.id)
+        if open_record is None or open_record.check_in_time is None:
             raise AttendanceCheckOutWithoutCheckInError()
-        if today_record.check_out_time is not None:
+        if open_record.check_out_time is not None:
             raise AttendanceAlreadyCheckedOutError()
 
         session = await self.attendance_session_service.create_session(access, AttendanceSessionType.CHECK_OUT)
@@ -163,9 +160,13 @@ class AttendanceService:
                 access.employee.id,
                 session_id,
             )
+            record_date = self._resolve_attendance_date(
+                access,
+                persisted_session.completed_at or self.now(),
+            )
             persisted_record = await self.attendance_record_repo.get_today_for_employee(
                 access.employee.id,
-                self.attendance_session_service.today(),
+                record_date,
             )
             if persisted_record is None:
                 raise AttendanceSessionConflictError()
@@ -191,8 +192,10 @@ class AttendanceService:
         await self.attendance_session_service.expire_old_sessions(access.employee.id)
         record = await self.attendance_record_repo.get_today_for_employee(
             access.employee.id,
-            self.attendance_session_service.today(),
+            self._resolve_attendance_date(access, self.now()),
         )
+        if record is None:
+            record = await self.attendance_record_repo.get_open_record_for_employee(access.employee.id)
         open_session = await self.attendance_session_service.get_open_session(access.employee.id)
         return AttendanceTodayStatusDTO(
             company_name=access.company.name,
@@ -259,18 +262,18 @@ class AttendanceService:
         *,
         commit: bool = True,
     ) -> AttendanceRecordDTO:
-        today = self.attendance_session_service.today()
-        record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, today)
+        completed_at = session.completed_at or self.now()
+        target_date = self._resolve_attendance_date(access, completed_at)
+        record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, target_date)
         if record is None:
             record = await self.attendance_record_repo.create(
                 company_id=access.company.id,
                 employee_id=access.employee.id,
-                target_date=today,
+                target_date=target_date,
             )
         if record.check_in_time is not None:
             raise AttendanceAlreadyCheckedInError()
 
-        completed_at = session.completed_at or self.now()
         late_minutes = self._calculate_late_minutes(access, completed_at)
         record.check_in_time = completed_at
         record.check_in_session_id = session.id
@@ -299,8 +302,7 @@ class AttendanceService:
         *,
         commit: bool = True,
     ) -> AttendanceRecordDTO:
-        today = self.attendance_session_service.today()
-        record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, today)
+        record = await self.attendance_record_repo.get_open_record_for_employee(access.employee.id)
         if record is None or record.check_in_time is None:
             raise AttendanceCheckOutWithoutCheckInError()
         if record.check_out_time is not None:
@@ -308,7 +310,11 @@ class AttendanceService:
 
         completed_at = session.completed_at or self.now()
         worked_minutes = max(0, int((completed_at - record.check_in_time).total_seconds() // 60))
-        early_leave_minutes = self._calculate_early_leave_minutes(access, completed_at)
+        early_leave_minutes = self._calculate_early_leave_minutes(
+            access,
+            record.check_in_time,
+            completed_at,
+        )
         record.check_out_time = completed_at
         record.check_out_session_id = session.id
         record.worked_minutes = worked_minutes
@@ -338,26 +344,67 @@ class AttendanceService:
 
     @staticmethod
     def _calculate_late_minutes(access: EmployeeAccessDTO, check_in_time: datetime) -> int:
+        shift_window = AttendanceService._resolve_shift_window(access, check_in_time)
+        if shift_window is None:
+            return 0
         shift = access.employee.shift
         if shift is None:
             return 0
-        shift_start = datetime.combine(check_in_time.date(), shift.start_time, tzinfo=check_in_time.tzinfo)
+        shift_start, _shift_end = shift_window
         threshold = shift_start + timedelta(minutes=shift.late_after_minutes)
         if check_in_time <= threshold:
             return 0
         return max(0, int((check_in_time - shift_start).total_seconds() // 60))
 
     @staticmethod
-    def _calculate_early_leave_minutes(access: EmployeeAccessDTO, check_out_time: datetime) -> int:
+    def _calculate_early_leave_minutes(
+        access: EmployeeAccessDTO,
+        check_in_time: datetime,
+        check_out_time: datetime,
+    ) -> int:
+        shift_window = AttendanceService._resolve_shift_window(access, check_out_time, anchor_date=check_in_time.date())
+        if shift_window is None:
+            return 0
         shift = access.employee.shift
         if shift is None:
             return 0
 
-        shift_start = datetime.combine(check_out_time.date(), shift.start_time, tzinfo=check_out_time.tzinfo)
-        shift_end = datetime.combine(check_out_time.date(), shift.end_time, tzinfo=check_out_time.tzinfo)
-        if shift_end <= shift_start:
-            shift_end += timedelta(days=1)
+        _shift_start, shift_end = shift_window
         threshold = shift_end - timedelta(minutes=shift.early_leave_before_minutes)
         if check_out_time >= threshold:
             return 0
         return max(0, int((shift_end - check_out_time).total_seconds() // 60))
+
+    @staticmethod
+    def _resolve_attendance_date(access: EmployeeAccessDTO, reference_time: datetime) -> date:
+        shift_window = AttendanceService._resolve_shift_window(access, reference_time)
+        if shift_window is None:
+            return reference_time.date()
+        shift_start, _shift_end = shift_window
+        return shift_start.date()
+
+    @staticmethod
+    def _resolve_shift_window(
+        access: EmployeeAccessDTO,
+        reference_time: datetime,
+        *,
+        anchor_date: date | None = None,
+    ) -> tuple[datetime, datetime] | None:
+        shift = access.employee.shift
+        if shift is None:
+            return None
+
+        tzinfo = reference_time.tzinfo or AttendanceService.APP_TZ
+        base_date = anchor_date or reference_time.date()
+        shift_start = datetime.combine(base_date, shift.start_time, tzinfo=tzinfo)
+        shift_end = datetime.combine(base_date, shift.end_time, tzinfo=tzinfo)
+
+        if shift.end_time <= shift.start_time:
+            if anchor_date is not None:
+                shift_end += timedelta(days=1)
+            elif reference_time.timetz().replace(tzinfo=None) < shift.end_time:
+                shift_start -= timedelta(days=1)
+            else:
+                shift_end += timedelta(days=1)
+
+        return shift_start, shift_end

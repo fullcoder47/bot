@@ -12,7 +12,6 @@ from app.domain.dto.shift_dto import ShiftCreateDTO, ShiftDTO, ShiftListPageDTO,
 from app.domain.exceptions.company_admin_exceptions import (
     InvalidWorkDaysError,
     ShiftAlreadyExistsError,
-    ShiftDeleteRestrictedError,
     ShiftNotFoundError,
 )
 
@@ -154,21 +153,24 @@ class ShiftService:
         company_id: int,
         shift_id: int,
         actor_telegram_id: int | None = None,
-    ) -> None:
+    ) -> int:
         shift = await self._get_shift_or_raise(company_id, shift_id)
-        linked_employees = await self.employee_repo.count_by_shift(company_id, shift_id)
-        if linked_employees > 0:
-            raise ShiftDeleteRestrictedError()
+        detached_employees = await self.employee_repo.clear_shift_assignments(company_id, shift_id)
 
         await self.audit_log_repo.create(
             actor_telegram_id=actor_telegram_id,
             action="shift_deleted",
             entity_type="shift",
             entity_id=shift.id,
-            metadata_json={"company_id": company_id, "name": shift.name},
+            metadata_json={
+                "company_id": company_id,
+                "name": shift.name,
+                "detached_employees": detached_employees,
+            },
         )
         await self.shift_repo.delete(shift)
         await self.session.commit()
+        return detached_employees
 
     async def get_shift(self, company_id: int, shift_id: int) -> ShiftDTO:
         shift = await self._get_shift_or_raise(company_id, shift_id)

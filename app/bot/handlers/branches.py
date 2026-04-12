@@ -28,7 +28,6 @@ from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.branch_dto import BranchCreateDTO, BranchDTO, BranchUpdateDTO
 from app.domain.exceptions.company_admin_exceptions import (
     BranchAlreadyExistsError,
-    BranchDeleteRestrictedError,
     BranchNotFoundError,
     InvalidLatitudeError,
     InvalidLongitudeError,
@@ -750,17 +749,29 @@ async def branch_delete_confirm_handler(callback: CallbackQuery, session: AsyncS
     _, _, branch_id_raw, page_raw = callback.data.split(":", 3)
     service = BranchService(session)
     try:
-        await service.delete_branch(access.company.id, int(branch_id_raw), actor_telegram_id=access.user.telegram_id)
-    except BranchDeleteRestrictedError:
-        await callback.answer(t(access.user.language, uz="Filialga ishchilar biriktirilgan. Avval ularni ko'chiring yoki filialni deaktiv qiling.", ru="К филиалу привязаны сотрудники. Сначала перенесите их или деактивируйте филиал.", en="This branch has linked employees. Move them first or deactivate the branch."), show_alert=True)
-        return
+        detached_count = await service.delete_branch(
+            access.company.id,
+            int(branch_id_raw),
+            actor_telegram_id=access.user.telegram_id,
+        )
     except BranchNotFoundError:
         await callback.answer(t(access.user.language, uz="Filial topilmadi.", ru="Филиал не найден.", en="Branch not found."), show_alert=True)
         return
     branch_page = await service.list_branches(access.company.id, page=int(page_raw), page_size=BRANCH_PAGE_SIZE)
     await callback.answer(t(access.user.language, uz="Filial o'chirildi.", ru="Филиал удалён.", en="Branch deleted."))
     await callback.message.edit_text(
-        t(access.user.language, uz=f"Filiallar ro'yxati ({branch_page.page}/{branch_page.total_pages})", ru=f"Список филиалов ({branch_page.page}/{branch_page.total_pages})", en=f"Branch list ({branch_page.page}/{branch_page.total_pages})"),
+        "\n".join(
+            [
+                t(access.user.language, uz=f"Filiallar ro'yxati ({branch_page.page}/{branch_page.total_pages})", ru=f"Список филиалов ({branch_page.page}/{branch_page.total_pages})", en=f"Branch list ({branch_page.page}/{branch_page.total_pages})"),
+                t(access.user.language, uz="Filial o'chirildi.", ru="Филиал удалён.", en="Branch deleted."),
+                t(
+                    access.user.language,
+                    uz=f"{detached_count} ta ishchidan filial biriktiruvi olib tashlandi." if detached_count else "Biriktirilgan ishchi topilmadi.",
+                    ru=f"У {detached_count} сотрудников филиал был отвязан." if detached_count else "Привязанных сотрудников не было.",
+                    en=f"Branch assignment was removed from {detached_count} employees." if detached_count else "There were no linked employees.",
+                ),
+            ]
+        ),
         reply_markup=build_branch_list_keyboard(branch_page, access.user.language),
     )
 

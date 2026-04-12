@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -185,6 +185,42 @@ class EmployeeRepository:
             Employee.shift_id == shift_id,
         )
         return int((await self.session.scalar(statement)) or 0)
+
+    async def clear_branch_assignments(self, company_id: int, branch_id: int) -> int:
+        result = await self.session.execute(
+            update(Employee)
+            .where(
+                Employee.company_id == company_id,
+                Employee.branch_id == branch_id,
+            )
+            .values(branch_id=None)
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
+
+    async def clear_department_assignments(self, company_id: int, department_id: int) -> int:
+        result = await self.session.execute(
+            update(Employee)
+            .where(
+                Employee.company_id == company_id,
+                Employee.department_id == department_id,
+            )
+            .values(department_id=None)
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
+
+    async def clear_shift_assignments(self, company_id: int, shift_id: int) -> int:
+        result = await self.session.execute(
+            update(Employee)
+            .where(
+                Employee.company_id == company_id,
+                Employee.shift_id == shift_id,
+            )
+            .values(shift_id=None)
+        )
+        await self.session.flush()
+        return int(result.rowcount or 0)
 
     def _apply_filters(self, statement, company_id: int, filters: EmployeeFiltersDTO | None):
         statement = statement.where(Employee.company_id == company_id)

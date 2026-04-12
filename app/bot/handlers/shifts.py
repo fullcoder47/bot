@@ -49,6 +49,21 @@ def _format_shift_detail(language, shift: ShiftDTO) -> str:
     )
 
 
+async def _restore_shift_detail(
+    message: Message,
+    service: ShiftService,
+    company_id: int,
+    shift_id: int,
+    page: int,
+    language,
+) -> None:
+    shift = await service.get_shift(company_id, shift_id)
+    await message.edit_text(
+        _format_shift_detail(language, shift),
+        reply_markup=build_shift_detail_keyboard(shift, page, language),
+    )
+
+
 @router.message(LocalizedTextFilter(*add_shift_button_texts()))
 async def add_shift_entry_handler(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     access = await require_company_admin_message(message, session, settings)
@@ -107,7 +122,19 @@ async def shift_back_handler(message: Message, state: FSMContext, session: Async
     access = await require_company_admin_message(message, session, settings)
     if access is None:
         return
+    data = await state.get_data()
     await state.clear()
+    if data.get("is_edit") and data.get("shift_id"):
+        shift = await ShiftService(session).get_shift(access.company.id, int(data["shift_id"]))
+        await message.answer(
+            _format_shift_detail(access.user.language, shift),
+            reply_markup=build_shift_detail_keyboard(
+                shift,
+                int(data.get("page", 1)),
+                access.user.language,
+            ),
+        )
+        return
     await show_shift_menu(message, access.user.language or DEFAULT_LANGUAGE)
 
 
@@ -266,7 +293,11 @@ async def shift_create_confirm_handler(callback: CallbackQuery, state: FSMContex
     await callback.answer(t(access.user.language, uz="Smena saqlandi.", ru="Смена сохранена.", en="Shift saved."))
     await callback.message.edit_text(
         _format_shift_detail(access.user.language, shift),
-        reply_markup=build_shift_detail_keyboard(shift, 1, access.user.language),
+        reply_markup=build_shift_detail_keyboard(
+            shift,
+            int(data.get("page", 1)) if data.get("is_edit") else 1,
+            access.user.language,
+        ),
     )
 
 
@@ -275,8 +306,19 @@ async def shift_create_cancel_handler(callback: CallbackQuery, state: FSMContext
     access = await require_company_admin_callback(callback, session, settings)
     if access is None or callback.message is None:
         return
+    data = await state.get_data()
     await state.clear()
     await callback.answer()
+    if data.get("is_edit") and data.get("shift_id"):
+        await _restore_shift_detail(
+            callback.message,
+            ShiftService(session),
+            access.company.id,
+            int(data["shift_id"]),
+            int(data.get("page", 1)),
+            access.user.language,
+        )
+        return
     await callback.message.edit_text(t(access.user.language, uz="Smena yaratish bekor qilindi.", ru="Создание смены отменено.", en="Shift creation cancelled."))
     await show_shift_menu(callback.message, access.user.language or DEFAULT_LANGUAGE)
 
@@ -361,7 +403,11 @@ async def shift_delete_confirm_handler(callback: CallbackQuery, session: AsyncSe
     _, _, shift_id_raw, page_raw = callback.data.split(":", 3)
     service = ShiftService(session)
     try:
-        await service.delete_shift(access.company.id, int(shift_id_raw), actor_telegram_id=access.user.telegram_id)
+        _detached_count = await service.delete_shift(
+            access.company.id,
+            int(shift_id_raw),
+            actor_telegram_id=access.user.telegram_id,
+        )
     except ShiftDeleteRestrictedError:
         await callback.answer(t(access.user.language, uz="Smenaga ishchilar bog'langan. Avval ularni ko'chiring yoki smenani deaktiv qiling.", ru="К смене привязаны сотрудники. Сначала перенесите их или деактивируйте смену.", en="This shift has linked employees. Move them first or deactivate the shift."), show_alert=True)
         return

@@ -10,7 +10,6 @@ from app.db.repositories.employee_repo import EmployeeRepository
 from app.domain.dto.branch_dto import BranchCreateDTO, BranchDTO, BranchListPageDTO, BranchUpdateDTO
 from app.domain.exceptions.company_admin_exceptions import (
     BranchAlreadyExistsError,
-    BranchDeleteRestrictedError,
     BranchNotFoundError,
     InvalidLatitudeError,
     InvalidLongitudeError,
@@ -230,21 +229,24 @@ class BranchService:
         company_id: int,
         branch_id: int,
         actor_telegram_id: int | None = None,
-    ) -> None:
+    ) -> int:
         branch = await self._get_branch_or_raise(company_id, branch_id)
-        linked_employees = await self.employee_repo.count_by_branch(company_id, branch_id)
-        if linked_employees > 0:
-            raise BranchDeleteRestrictedError()
+        detached_employees = await self.employee_repo.clear_branch_assignments(company_id, branch_id)
 
         await self.audit_log_repo.create(
             actor_telegram_id=actor_telegram_id,
             action="branch_deleted",
             entity_type="branch",
             entity_id=branch.id,
-            metadata_json={"company_id": company_id, "name": branch.name},
+            metadata_json={
+                "company_id": company_id,
+                "name": branch.name,
+                "detached_employees": detached_employees,
+            },
         )
         await self.branch_repo.delete(branch)
         await self.session.commit()
+        return detached_employees
 
     async def get_branch(self, company_id: int, branch_id: int) -> BranchDTO:
         branch = await self._get_branch_or_raise(company_id, branch_id)
