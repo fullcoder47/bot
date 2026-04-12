@@ -19,6 +19,17 @@ def build_super_admin_settings_keyboard(language: LanguageCode | str | None) -> 
                 InlineKeyboardButton(
                     text=t(
                         language,
+                        uz="💳 To'lov kartasi",
+                        ru="💳 Платежная карта",
+                        en="💳 Payment card",
+                    ),
+                    callback_data="superadmin:settings:payment_card",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=t(
+                        language,
                         uz="🛠 Tizim sozlamalari",
                         ru="🛠 Системные настройки",
                         en="🛠 System settings",
@@ -30,6 +41,30 @@ def build_super_admin_settings_keyboard(language: LanguageCode | str | None) -> 
                 InlineKeyboardButton(
                     text=t(language, uz="⬅️ Orqaga", ru="⬅️ Назад", en="⬅️ Back"),
                     callback_data="superadmin:settings:back",
+                )
+            ],
+        ]
+    )
+
+
+def build_super_admin_payment_card_keyboard(language: LanguageCode | str | None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=t(
+                        language,
+                        uz="✏️ Kartani yangilash",
+                        ru="✏️ Обновить карту",
+                        en="✏️ Update card",
+                    ),
+                    callback_data="superadmin:settings:payment_card:set",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=t(language, uz="⬅️ Orqaga", ru="⬅️ Назад", en="⬅️ Back"),
+                    callback_data="superadmin:settings:payment_card:back",
                 )
             ],
         ]

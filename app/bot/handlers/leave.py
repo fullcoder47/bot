@@ -17,6 +17,7 @@ from app.core.localization import t
 from app.domain.dto.leave_dto import LeaveRequestCreateDTO
 from app.domain.enums.leave_type import LeaveType
 from app.domain.exceptions.attendance_exceptions import LeaveRequestValidationError
+from app.services.leave_notification_service import LeaveNotificationService
 from app.services.leave_service import LeaveService
 
 router = Router(name="leave")
@@ -345,6 +346,11 @@ async def leave_request_confirm_handler(
         )
         return
 
+    await LeaveNotificationService(session).notify_company_admin(
+        callback.bot,
+        access=access,
+        leave_request=leave_request,
+    )
     await state.clear()
     await callback.answer(
         t(

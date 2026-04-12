@@ -5,6 +5,7 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.handlers.employee_common import show_employee_panel
+from app.bot.handlers.public_onboarding import edit_public_onboarding_home
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
@@ -106,9 +107,10 @@ async def language_callback_handler(
     await callback.message.edit_text(
         t(
             language,
-            uz="Til saqlandi. Hozircha sizda kirish huquqi yo'q.",
-            ru="Язык сохранен. Сейчас у вас нет доступа.",
-            en="Language saved. You do not have access right now.",
+            uz="Til saqlandi. Public ariza oynasi tayyor.",
+            ru="Язык сохранен. Публичная заявка готова.",
+            en="Language saved. The public application view is ready.",
         ),
         reply_markup=None,
     )
+    await edit_public_onboarding_home(callback.message, session, telegram_user, language)

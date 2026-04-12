@@ -26,11 +26,13 @@ async def init_db(engine: AsyncEngine) -> None:
         AuditLog,
         Branch,
         Company,
+        CompanyAdminApplication,
         CompanyAdminInvite,
         Department,
         Employee,
         LeaveRequest,
         Shift,
+        SystemSetting,
         User,
     )
 

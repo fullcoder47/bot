@@ -13,13 +13,17 @@ from app.bot.handlers.company_admin import (
 )
 from app.bot.handlers.company_admin_common import format_company_admin_dashboard
 from app.bot.handlers.employee_common import show_employee_panel
-from app.bot.keyboards.inline.super_admin import build_super_admin_settings_keyboard
+from app.bot.keyboards.inline.super_admin import (
+    build_super_admin_payment_card_keyboard,
+    build_super_admin_settings_keyboard,
+)
 from app.bot.keyboards.reply.company_admin import build_company_admin_keyboard
 from app.bot.keyboards.reply.super_admin import (
     build_super_admin_keyboard,
     settings_button_texts,
     statistics_button_texts,
 )
+from app.bot.states.super_admin_settings_states import SuperAdminSettingsStates
 from app.core.config import Settings
 from app.core.localization import DEFAULT_LANGUAGE, t
 from app.domain.dto.company_dto import CompanyStatisticsDTO, SuperAdminDashboardDTO
@@ -27,8 +31,30 @@ from app.domain.dto.user_dto import UserDTO
 from app.domain.exceptions.auth_exceptions import AccessDeniedError, LanguageSelectionRequiredError
 from app.services.auth_service import AuthService
 from app.services.stats_service import StatsService
+from app.services.system_settings_service import SystemSettingsService
 
 router = Router(name="super_admin")
+
+
+def _format_payment_card_text(language, payment_card: str | None) -> str:
+    return "\n".join(
+        [
+            t(language, uz="To'lov kartasi sozlamasi", ru="Настройка платежной карты", en="Payment card setting"),
+            t(
+                language,
+                uz=f"Joriy karta: {payment_card or 'Belgilanmagan'}",
+                ru=f"Текущая карта: {payment_card or 'Не указана'}",
+                en=f"Current card: {payment_card or 'Not set'}",
+            ),
+            "",
+            t(
+                language,
+                uz="Yangi karta raqamini yuboring yoki `-` yuborib tozalang.",
+                ru="Отправьте новый номер карты или `-`, чтобы очистить.",
+                en="Send a new card number or `-` to clear it.",
+            ),
+        ]
+    )
 
 
 def _format_plan_distribution(language, dashboard: CompanyStatisticsDTO | SuperAdminDashboardDTO) -> list[str]:
@@ -346,6 +372,36 @@ async def settings_menu_handler(
     await show_company_admin_settings_menu(message, access, session)
 
 
+@router.message(SuperAdminSettingsStates.waiting_for_payment_card)
+async def payment_card_input_handler(
+    message: Message,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_super_admin_user(message, session, settings)
+    if user is None:
+        return
+
+    payment_card = await SystemSettingsService(session).update_payment_card_number(
+        message.text or "",
+        actor_telegram_id=user.telegram_id,
+    )
+    await state.clear()
+    await message.answer(
+        t(
+            user.language,
+            uz="To'lov kartasi yangilandi.",
+            ru="Платежная карта обновлена.",
+            en="Payment card updated.",
+        )
+    )
+    await message.answer(
+        _format_payment_card_text(user.language, payment_card),
+        reply_markup=build_super_admin_payment_card_keyboard(user.language),
+    )
+
+
 @router.callback_query(F.data == "superadmin:settings:language")
 async def settings_language_placeholder_handler(
     callback: CallbackQuery,
@@ -385,6 +441,74 @@ async def settings_system_placeholder_handler(
             uz="Tizim sozlamalari keyingi bosqichda kengaytiriladi.",
             ru="Системные настройки будут расширены на следующем этапе.",
             en="System settings will be expanded in the next stage.",
+        ),
+        reply_markup=build_super_admin_settings_keyboard(user.language),
+    )
+
+
+@router.callback_query(F.data == "superadmin:settings:payment_card")
+async def settings_payment_card_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_super_admin_callback(callback, session, settings)
+    if user is None or callback.message is None:
+        return
+
+    await state.clear()
+    payment_card = await SystemSettingsService(session).get_payment_card_number()
+    await callback.answer()
+    await callback.message.edit_text(
+        _format_payment_card_text(user.language, payment_card),
+        reply_markup=build_super_admin_payment_card_keyboard(user.language),
+    )
+
+
+@router.callback_query(F.data == "superadmin:settings:payment_card:set")
+async def settings_payment_card_set_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_super_admin_callback(callback, session, settings)
+    if user is None or callback.message is None:
+        return
+
+    await state.clear()
+    await state.set_state(SuperAdminSettingsStates.waiting_for_payment_card)
+    await callback.answer()
+    await callback.message.answer(
+        t(
+            user.language,
+            uz="Karta raqamini yuboring. Tozalash uchun `-` yuboring.",
+            ru="Отправьте номер карты. Для очистки отправьте `-`.",
+            en="Send the card number. Send `-` to clear it.",
+        )
+    )
+
+
+@router.callback_query(F.data == "superadmin:settings:payment_card:back")
+async def settings_payment_card_back_handler(
+    callback: CallbackQuery,
+    state: FSMContext,
+    session: AsyncSession,
+    settings: Settings,
+) -> None:
+    user = await _require_super_admin_callback(callback, session, settings)
+    if user is None or callback.message is None:
+        return
+
+    await state.clear()
+    await callback.answer()
+    await callback.message.edit_text(
+        t(
+            user.language,
+            uz="Sozlamalar bo'limi",
+            ru="Раздел настроек",
+            en="Settings section",
         ),
         reply_markup=build_super_admin_settings_keyboard(user.language),
     )

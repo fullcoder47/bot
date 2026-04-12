@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.bot.handlers.company_admin_common import show_company_admin_panel
 from app.bot.handlers.employee_common import show_employee_panel
+from app.bot.handlers.public_onboarding import show_public_onboarding_home
 from app.bot.keyboards.inline.language import build_language_keyboard
 from app.bot.keyboards.reply.super_admin import build_super_admin_keyboard
 from app.core.config import Settings
@@ -119,14 +120,7 @@ async def start_handler(
     language = result.language or DEFAULT_LANGUAGE
 
     if result.status is StartFlowStatus.ACCESS_DENIED:
-        await message.answer(
-            t(
-                language,
-                uz="Sizda bu botdan foydalanish huquqi yo'q.",
-                ru="У вас нет доступа к этому боту.",
-                en="You do not have access to this bot.",
-            )
-        )
+        await show_public_onboarding_home(message, session, telegram_user, language)
         return
 
     if result.status is StartFlowStatus.COMPANY_ADMIN:

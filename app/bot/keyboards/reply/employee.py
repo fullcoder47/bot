@@ -30,6 +30,10 @@ def rules_button_text(language: LanguageCode | str | None) -> str:
     return t(language, uz="ℹ️ Qoidalar", ru="ℹ️ Правила", en="ℹ️ Rules")
 
 
+def settings_button_text(language: LanguageCode | str | None) -> str:
+    return t(language, uz="⚙️ Sozlamalar", ru="⚙️ Настройки", en="⚙️ Settings")
+
+
 def cancel_button_text(language: LanguageCode | str | None) -> str:
     return t(language, uz="❌ Bekor qilish", ru="❌ Отмена", en="❌ Cancel")
 
@@ -53,6 +57,7 @@ def build_employee_keyboard(language: LanguageCode | str | None) -> ReplyKeyboar
                 KeyboardButton(text=leave_request_button_text(language)),
                 KeyboardButton(text=rules_button_text(language)),
             ],
+            [KeyboardButton(text=settings_button_text(language))],
         ],
         resize_keyboard=True,
     )
@@ -105,6 +110,10 @@ def leave_request_button_texts() -> set[str]:
 
 def rules_button_texts() -> set[str]:
     return _localized_variants(rules_button_text)
+
+
+def settings_button_texts() -> set[str]:
+    return _localized_variants(settings_button_text)
 
 
 def cancel_button_texts() -> set[str]:
