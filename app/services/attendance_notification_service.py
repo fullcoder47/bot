@@ -14,6 +14,7 @@ from app.domain.dto.attendance_dto import AttendanceRecordDTO, AttendanceSession
 from app.domain.dto.employee_dto import EmployeeAccessDTO
 from app.domain.enums.attendance_session_type import AttendanceSessionType
 from app.domain.enums.attendance_status import AttendanceStatus
+from app.services.attendance_service import AttendanceService
 
 
 class AttendanceNotificationService:
@@ -98,6 +99,12 @@ class AttendanceNotificationService:
             if attendance_session.is_video_received
             else t(language, uz="Yo'q", ru="Нет", en="No")
         )
+        event_timing_note = self._event_timing_note(
+            language,
+            access=access,
+            attendance_session=attendance_session,
+            attendance_record=attendance_record,
+        )
 
         lines = [
             t(
@@ -125,13 +132,15 @@ class AttendanceNotificationService:
             t(language, uz=f"Erta ketish: {attendance_record.early_leave_minutes} min", ru=f"Ранний уход: {attendance_record.early_leave_minutes} мин", en=f"Early leave: {attendance_record.early_leave_minutes} min"),
             t(language, uz=f"Ishlangan vaqt: {attendance_record.worked_minutes} min", ru=f"Отработано: {attendance_record.worked_minutes} мин", en=f"Worked: {attendance_record.worked_minutes} min"),
         ]
+        if event_timing_note is not None:
+            lines.append(event_timing_note)
         return "\n".join(lines)
 
     @staticmethod
     def _format_datetime(value: datetime | None) -> str:
         if value is None:
             return "-"
-        return value.strftime("%Y-%m-%d %H:%M:%S")
+        return AttendanceService.to_app_tz(value).strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
     def _format_shift_window(access: EmployeeAccessDTO) -> str:
@@ -159,3 +168,69 @@ class AttendanceNotificationService:
             AttendanceStatus.WEEKEND: t(language, uz="Dam olish kuni", ru="Выходной", en="Weekend"),
         }
         return mapping.get(status, status.value)
+
+    @staticmethod
+    def _event_timing_note(
+        language,
+        *,
+        access: EmployeeAccessDTO,
+        attendance_session: AttendanceSessionDTO,
+        attendance_record: AttendanceRecordDTO,
+    ) -> str | None:
+        if attendance_session.session_type is AttendanceSessionType.CHECK_IN:
+            state, minutes = AttendanceService.get_check_in_timing_state(
+                access,
+                attendance_record.check_in_time,
+                late_minutes=attendance_record.late_minutes,
+            )
+            if state == "early":
+                return t(
+                    language,
+                    uz=f"Kelish bahosi: Erta keldi ({minutes} daqiqa oldin)",
+                    ru=f"Оценка прихода: Пришел раньше (на {minutes} мин)",
+                    en=f"Arrival note: Arrived early ({minutes} minutes early)",
+                )
+            if state == "late":
+                return t(
+                    language,
+                    uz=f"Kelish bahosi: Kech keldi ({minutes} daqiqa kech)",
+                    ru=f"Оценка прихода: Опоздал (на {minutes} мин)",
+                    en=f"Arrival note: Arrived late ({minutes} minutes late)",
+                )
+            if state == "on_time":
+                return t(
+                    language,
+                    uz="Kelish bahosi: O'z vaqtida keldi",
+                    ru="Оценка прихода: Пришел вовремя",
+                    en="Arrival note: Arrived on time",
+                )
+            return None
+
+        state, minutes = AttendanceService.get_check_out_timing_state(
+            access,
+            attendance_record.check_in_time,
+            attendance_record.check_out_time,
+            early_leave_minutes=attendance_record.early_leave_minutes,
+        )
+        if state == "early":
+            return t(
+                language,
+                uz=f"Ketish bahosi: Erta ketdi ({minutes} daqiqa oldin)",
+                ru=f"Оценка ухода: Ушел раньше (на {minutes} мин)",
+                en=f"Departure note: Left early ({minutes} minutes early)",
+            )
+        if state == "late":
+            return t(
+                language,
+                uz=f"Ketish bahosi: Kech ketdi ({minutes} daqiqa kech)",
+                ru=f"Оценка ухода: Ушел позже (на {minutes} мин)",
+                en=f"Departure note: Left late ({minutes} minutes late)",
+            )
+        if state == "on_time":
+            return t(
+                language,
+                uz="Ketish bahosi: O'z vaqtida ketdi",
+                ru="Оценка ухода: Ушел вовремя",
+                en="Departure note: Left on time",
+            )
+        return None

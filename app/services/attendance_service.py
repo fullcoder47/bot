@@ -61,6 +61,12 @@ class AttendanceService:
     def now(cls) -> datetime:
         return datetime.now(cls.APP_TZ)
 
+    @classmethod
+    def to_app_tz(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=cls.APP_TZ)
+        return value.astimezone(cls.APP_TZ)
+
     async def start_check_in(self, access: EmployeeAccessDTO) -> AttendanceSessionStartResultDTO:
         await self.attendance_session_service.expire_old_sessions(access.employee.id)
         open_session = await self.attendance_session_service.get_open_session(access.employee.id)
@@ -262,7 +268,7 @@ class AttendanceService:
         *,
         commit: bool = True,
     ) -> AttendanceRecordDTO:
-        completed_at = session.completed_at or self.now()
+        completed_at = self.to_app_tz(session.completed_at or self.now())
         target_date = self._resolve_attendance_date(access, completed_at)
         record = await self.attendance_record_repo.get_today_for_employee(access.employee.id, target_date)
         if record is None:
@@ -308,11 +314,12 @@ class AttendanceService:
         if record.check_out_time is not None:
             raise AttendanceAlreadyCheckedOutError()
 
-        completed_at = session.completed_at or self.now()
-        worked_minutes = max(0, int((completed_at - record.check_in_time).total_seconds() // 60))
+        completed_at = self.to_app_tz(session.completed_at or self.now())
+        normalized_check_in_time = self.to_app_tz(record.check_in_time)
+        worked_minutes = max(0, int((completed_at - normalized_check_in_time).total_seconds() // 60))
         early_leave_minutes = self._calculate_early_leave_minutes(
             access,
-            record.check_in_time,
+            normalized_check_in_time,
             completed_at,
         )
         record.check_out_time = completed_at
@@ -342,9 +349,10 @@ class AttendanceService:
         await self.session.refresh(record)
         return AttendanceRecordDTO.from_model(record)
 
-    @staticmethod
-    def _calculate_late_minutes(access: EmployeeAccessDTO, check_in_time: datetime) -> int:
-        shift_window = AttendanceService._resolve_shift_window(access, check_in_time)
+    @classmethod
+    def _calculate_late_minutes(cls, access: EmployeeAccessDTO, check_in_time: datetime) -> int:
+        normalized_check_in_time = cls.to_app_tz(check_in_time)
+        shift_window = cls._resolve_shift_window(access, normalized_check_in_time)
         if shift_window is None:
             return 0
         shift = access.employee.shift
@@ -352,17 +360,24 @@ class AttendanceService:
             return 0
         shift_start, _shift_end = shift_window
         threshold = shift_start + timedelta(minutes=shift.late_after_minutes)
-        if check_in_time <= threshold:
+        if normalized_check_in_time <= threshold:
             return 0
-        return max(0, int((check_in_time - shift_start).total_seconds() // 60))
+        return max(0, int((normalized_check_in_time - shift_start).total_seconds() // 60))
 
-    @staticmethod
+    @classmethod
     def _calculate_early_leave_minutes(
+        cls,
         access: EmployeeAccessDTO,
         check_in_time: datetime,
         check_out_time: datetime,
     ) -> int:
-        shift_window = AttendanceService._resolve_shift_window(access, check_out_time, anchor_date=check_in_time.date())
+        normalized_check_in_time = cls.to_app_tz(check_in_time)
+        normalized_check_out_time = cls.to_app_tz(check_out_time)
+        shift_window = cls._resolve_shift_window(
+            access,
+            normalized_check_out_time,
+            anchor_date=normalized_check_in_time.date(),
+        )
         if shift_window is None:
             return 0
         shift = access.employee.shift
@@ -371,20 +386,22 @@ class AttendanceService:
 
         _shift_start, shift_end = shift_window
         threshold = shift_end - timedelta(minutes=shift.early_leave_before_minutes)
-        if check_out_time >= threshold:
+        if normalized_check_out_time >= threshold:
             return 0
-        return max(0, int((shift_end - check_out_time).total_seconds() // 60))
+        return max(0, int((shift_end - normalized_check_out_time).total_seconds() // 60))
 
-    @staticmethod
-    def _resolve_attendance_date(access: EmployeeAccessDTO, reference_time: datetime) -> date:
-        shift_window = AttendanceService._resolve_shift_window(access, reference_time)
+    @classmethod
+    def _resolve_attendance_date(cls, access: EmployeeAccessDTO, reference_time: datetime) -> date:
+        normalized_reference_time = cls.to_app_tz(reference_time)
+        shift_window = cls._resolve_shift_window(access, normalized_reference_time)
         if shift_window is None:
-            return reference_time.date()
+            return normalized_reference_time.date()
         shift_start, _shift_end = shift_window
         return shift_start.date()
 
-    @staticmethod
+    @classmethod
     def _resolve_shift_window(
+        cls,
         access: EmployeeAccessDTO,
         reference_time: datetime,
         *,
@@ -394,17 +411,79 @@ class AttendanceService:
         if shift is None:
             return None
 
-        tzinfo = reference_time.tzinfo or AttendanceService.APP_TZ
-        base_date = anchor_date or reference_time.date()
-        shift_start = datetime.combine(base_date, shift.start_time, tzinfo=tzinfo)
-        shift_end = datetime.combine(base_date, shift.end_time, tzinfo=tzinfo)
+        normalized_reference_time = cls.to_app_tz(reference_time)
+        base_date = anchor_date or normalized_reference_time.date()
+        shift_start = datetime.combine(base_date, shift.start_time, tzinfo=cls.APP_TZ)
+        shift_end = datetime.combine(base_date, shift.end_time, tzinfo=cls.APP_TZ)
 
         if shift.end_time <= shift.start_time:
             if anchor_date is not None:
                 shift_end += timedelta(days=1)
-            elif reference_time.timetz().replace(tzinfo=None) < shift.end_time:
+            elif normalized_reference_time.timetz().replace(tzinfo=None) < shift.end_time:
                 shift_start -= timedelta(days=1)
             else:
                 shift_end += timedelta(days=1)
 
         return shift_start, shift_end
+
+    @classmethod
+    def get_check_in_timing_state(
+        cls,
+        access: EmployeeAccessDTO,
+        check_in_time: datetime | None,
+        *,
+        late_minutes: int | None = None,
+    ) -> tuple[str, int]:
+        if check_in_time is None:
+            return "unknown", 0
+
+        normalized_check_in_time = cls.to_app_tz(check_in_time)
+        shift_window = cls._resolve_shift_window(access, normalized_check_in_time)
+        if shift_window is None:
+            return "unknown", 0
+
+        shift_start, _shift_end = shift_window
+        resolved_late_minutes = (
+            late_minutes if late_minutes is not None else cls._calculate_late_minutes(access, normalized_check_in_time)
+        )
+        if resolved_late_minutes > 0:
+            return "late", resolved_late_minutes
+        if normalized_check_in_time < shift_start:
+            early_minutes = max(0, int((shift_start - normalized_check_in_time).total_seconds() // 60))
+            return "early", early_minutes
+        return "on_time", 0
+
+    @classmethod
+    def get_check_out_timing_state(
+        cls,
+        access: EmployeeAccessDTO,
+        check_in_time: datetime | None,
+        check_out_time: datetime | None,
+        *,
+        early_leave_minutes: int | None = None,
+    ) -> tuple[str, int]:
+        if check_in_time is None or check_out_time is None:
+            return "unknown", 0
+
+        normalized_check_in_time = cls.to_app_tz(check_in_time)
+        normalized_check_out_time = cls.to_app_tz(check_out_time)
+        shift_window = cls._resolve_shift_window(
+            access,
+            normalized_check_out_time,
+            anchor_date=normalized_check_in_time.date(),
+        )
+        if shift_window is None:
+            return "unknown", 0
+
+        _shift_start, shift_end = shift_window
+        resolved_early_leave_minutes = (
+            early_leave_minutes
+            if early_leave_minutes is not None
+            else cls._calculate_early_leave_minutes(access, normalized_check_in_time, normalized_check_out_time)
+        )
+        if resolved_early_leave_minutes > 0:
+            return "early", resolved_early_leave_minutes
+        if normalized_check_out_time > shift_end:
+            late_minutes = max(0, int((normalized_check_out_time - shift_end).total_seconds() // 60))
+            return "late", late_minutes
+        return "on_time", 0

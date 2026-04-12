@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +19,103 @@ from app.services.auth_service import AuthService
 
 
 def _format_dt(value) -> str:
-    return value.strftime("%Y-%m-%d %H:%M") if value is not None else "-"
+    if value is None:
+        return "-"
+    return AttendanceService.to_app_tz(value).strftime("%Y-%m-%d %H:%M")
+
+
+def _format_time(value) -> str:
+    if value is None:
+        return "-"
+    return AttendanceService.to_app_tz(value).strftime("%H:%M")
+
+
+def _attendance_subject(access_or_employee):
+    if hasattr(access_or_employee, "employee"):
+        return access_or_employee
+    return SimpleNamespace(employee=access_or_employee)
+
+
+def format_check_in_timing(language, access_or_employee, record: AttendanceRecordDTO) -> str | None:
+    if record.check_in_time is None:
+        return None
+
+    subject = _attendance_subject(access_or_employee)
+    state, minutes = AttendanceService.get_check_in_timing_state(
+        subject,
+        record.check_in_time,
+        late_minutes=record.late_minutes,
+    )
+    check_in_time = _format_time(record.check_in_time)
+    if state == "early":
+        return t(
+            language,
+            uz=f"Kelish bahosi: Erta keldi ({check_in_time}, {minutes} daqiqa oldin)",
+            ru=f"Оценка прихода: Пришел раньше ({check_in_time}, на {minutes} мин раньше)",
+            en=f"Arrival note: Arrived early ({check_in_time}, {minutes} minutes early)",
+        )
+    if state == "late":
+        return t(
+            language,
+            uz=f"Kelish bahosi: Kech keldi ({check_in_time}, {minutes} daqiqa kech)",
+            ru=f"Оценка прихода: Опоздал ({check_in_time}, на {minutes} мин позже)",
+            en=f"Arrival note: Arrived late ({check_in_time}, {minutes} minutes late)",
+        )
+    if state == "on_time":
+        return t(
+            language,
+            uz=f"Kelish bahosi: O'z vaqtida keldi ({check_in_time})",
+            ru=f"Оценка прихода: Пришел вовремя ({check_in_time})",
+            en=f"Arrival note: Arrived on time ({check_in_time})",
+        )
+    return None
+
+
+def format_check_out_timing(language, access_or_employee, record: AttendanceRecordDTO) -> str | None:
+    if record.check_in_time is None or record.check_out_time is None:
+        return None
+
+    subject = _attendance_subject(access_or_employee)
+    state, minutes = AttendanceService.get_check_out_timing_state(
+        subject,
+        record.check_in_time,
+        record.check_out_time,
+        early_leave_minutes=record.early_leave_minutes,
+    )
+    check_out_time = _format_time(record.check_out_time)
+    if state == "early":
+        return t(
+            language,
+            uz=f"Ketish bahosi: Erta ketdi ({check_out_time}, {minutes} daqiqa oldin)",
+            ru=f"Оценка ухода: Ушел раньше ({check_out_time}, на {minutes} мин раньше)",
+            en=f"Departure note: Left early ({check_out_time}, {minutes} minutes early)",
+        )
+    if state == "late":
+        return t(
+            language,
+            uz=f"Ketish bahosi: Kech ketdi ({check_out_time}, {minutes} daqiqa kech)",
+            ru=f"Оценка ухода: Ушел позже ({check_out_time}, на {minutes} мин позже)",
+            en=f"Departure note: Left late ({check_out_time}, {minutes} minutes late)",
+        )
+    if state == "on_time":
+        return t(
+            language,
+            uz=f"Ketish bahosi: O'z vaqtida ketdi ({check_out_time})",
+            ru=f"Оценка ухода: Ушел вовремя ({check_out_time})",
+            en=f"Departure note: Left on time ({check_out_time})",
+        )
+    return None
+
+
+def format_attendance_event_feedback(
+    language,
+    access_or_employee,
+    record: AttendanceRecordDTO,
+    session_type: AttendanceSessionType,
+) -> str | None:
+    if session_type is AttendanceSessionType.CHECK_IN:
+        return format_check_in_timing(language, access_or_employee, record)
+    return format_check_out_timing(language, access_or_employee, record)
 
 
 def format_attendance_status(language, status: AttendanceStatus) -> str:
@@ -125,6 +223,8 @@ def format_today_status(language, status: AttendanceTodayStatusDTO) -> str:
             t(language, uz="Bugun hali attendance qaydi yo'q.", ru="Сегодня еще нет attendance-записи.", en="There is no attendance record for today yet.")
         )
     else:
+        check_in_timing = format_check_in_timing(language, status.employee, status.attendance_record)
+        check_out_timing = format_check_out_timing(language, status.employee, status.attendance_record)
         lines.extend(
             [
                 t(language, uz=f"📌 Holat: {format_attendance_status(language, status.attendance_record.status)}", ru=f"📌 Статус: {format_attendance_status(language, status.attendance_record.status)}", en=f"📌 Status: {format_attendance_status(language, status.attendance_record.status)}"),
@@ -135,6 +235,10 @@ def format_today_status(language, status: AttendanceTodayStatusDTO) -> str:
                 t(language, uz=f"⏱ Ishlangan daqiqa: {status.attendance_record.worked_minutes}", ru=f"⏱ Отработано минут: {status.attendance_record.worked_minutes}", en=f"⏱ Worked minutes: {status.attendance_record.worked_minutes}"),
             ]
         )
+        if check_in_timing:
+            lines.append(check_in_timing)
+        if check_out_timing:
+            lines.append(check_out_timing)
     if status.open_session is not None:
         lines.extend(["", format_open_session(language, status.open_session)])
     return "\n".join(lines)
